@@ -4,7 +4,7 @@ import warnings
 
 import pandas as pd
 
-from aws_helpers.dynamodb import get_entire_table
+from ziki_helpers.aws.dynamodb import get_entire_table
 
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
@@ -15,6 +15,12 @@ class DecimalEncoder(json.JSONEncoder):
         if isinstance(o, decimal.Decimal):
             return str(o)
         return super(DecimalEncoder, self).default(o)
+
+
+def date_string_from_int(date_int: int) -> str:
+    """Convert a date integer to a date string."""
+    date_str = str(date_int)
+    return f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:]}"
 
 
 def sales_and_payments_from_raw_order_data(data) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -205,8 +211,8 @@ def sales_and_payments_from_raw_order_data(data) -> tuple[pd.DataFrame, pd.DataF
         }
     )
 
-    # Change businessDate integer to datetime
-    sales['businessDate'] = pd.to_datetime(sales['businessDate'], format='%Y%m%d')
-    payments['paidBusinessDate'] = pd.to_datetime(payments['paidBusinessDate'], format='%Y%m%d')
+    # Change businessDate integer to YYYY-MM-DD format
+    sales['businessDate'] = sales['businessDate'].apply(date_string_from_int)
+    payments['paidBusinessDate'] = payments['paidBusinessDate'].apply(date_string_from_int)
 
     return sales, payments
