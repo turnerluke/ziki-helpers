@@ -7,7 +7,6 @@ from .auth import get_authenticated_google_credentials
 gslides.initialize_credentials(get_authenticated_google_credentials())
 
 
-
 def get_presentation_from_id(slides_id: str) -> gslides.Presentation:
     """
     Initialize Google Slides from a presentation ID.

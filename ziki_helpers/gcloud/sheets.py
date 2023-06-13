@@ -1,13 +1,15 @@
 import pandas as pd
 
+from gspread import Spreadsheet
+
 from .auth import get_authenticated_gspread_client
 
-pd.options.mode.chained_assignment = None  # default='warn'
+pd.options.mode.chained_assignment = None
 
 gc = get_authenticated_gspread_client()
 
 
-def get_gspreadsheet(ss_name: str) -> gspread.models.Spreadsheet:
+def get_gspreadsheet(ss_name: str) -> Spreadsheet:
     """Given a Google Sheet name, returns the sheet as a gspread object."""
     spreadsheet = gc.open(ss_name)
     return spreadsheet

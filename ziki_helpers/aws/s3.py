@@ -115,7 +115,7 @@ def get_parquet_as_df(bucket_name: str, parquet_path: str) -> pd.DataFrame:
         raise AssertionError("File is not in Parquet format")
 
 
-def dataframe_to_s3_with_date_partition(df: pd.DataFrame, bucket_name: str, tablename: str, date: dt.date) -> None:
+def dataframe_to_s3_with_date_partition(df: pd.DataFrame, bucket_name: str, tablename: str, date: dt.date, filename='data') -> None:
     """
     Save a Pandas DataFrame to S3 with a date partition.
     :param df:
@@ -130,7 +130,7 @@ def dataframe_to_s3_with_date_partition(df: pd.DataFrame, bucket_name: str, tabl
     day = date.day
 
     # Save to S3, with year, month, day partitions
-    filepath = f'{tablename}/year={yr}/month={mo}/day={day}/data.parquet.gzip'
+    filepath = f'{tablename}/year={yr}/month={mo}/day={day}/{filename}.parquet.gzip'
     out_buffer = io.BytesIO()
     df.to_parquet(out_buffer, compression='gzip', index=False)
     s3.put_object(Bucket=bucket_name, Key=filepath, Body=out_buffer.getvalue())
