@@ -4,7 +4,7 @@ from gspread import Spreadsheet
 
 from .auth import get_authenticated_gspread_client
 
-pd.options.mode.chained_assignment = None  # default='warn'
+pd.options.mode.chained_assignment = None
 
 gc = get_authenticated_gspread_client()
 
