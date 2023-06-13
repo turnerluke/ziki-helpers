@@ -215,4 +215,8 @@ def sales_and_payments_from_raw_order_data(data) -> tuple[pd.DataFrame, pd.DataF
     sales['businessDate'] = sales['businessDate'].apply(date_string_from_int)
     payments['paidBusinessDate'] = payments['paidBusinessDate'].apply(date_string_from_int)
 
+    # Decimals
+    sales['gross'] = sales['gross'].apply(lambda x: decimal.Decimal(x).quantize(decimal.Decimal('0.00')))
+    sales['tax'] = sales['tax'].apply(lambda x: decimal.Decimal(x).quantize(decimal.Decimal('0.00')))
+
     return sales, payments

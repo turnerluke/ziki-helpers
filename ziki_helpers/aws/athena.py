@@ -51,7 +51,7 @@ def query_athena_and_get_results(query, database, output_location):
     rows = []
 
     for row in response['ResultSet']['Rows'][1:]:
-        rows.append([data['VarCharValue'] for data in row['Data']])
+        rows.append([data['VarCharValue'] if 'VarCharValue' in data else '' for data in row['Data']])
 
     df = pd.DataFrame(rows, columns=columns)
 
@@ -59,11 +59,21 @@ def query_athena_and_get_results(query, database, output_location):
 
 
 if __name__ == '__main__':
+    # query = """
+    # SELECT *
+    # FROM "sales"
+    # WHERE year = 2023 and month = 6 and day = 10
+    # limit 10;
+    # """
+    # database = 'ziki_analytics'
+    # s3_output = 's3://ziki-athena-query-results/athena-results/'
+    # df = query_athena_and_get_results(query, database, s3_output)
+    # print(df)
+
     query = """
     SELECT * 
-    FROM "sales" 
-    WHERE year = 2023 and month = 6 and day = 10
-    limit 10;
+    FROM "sales"
+    ;
     """
     database = 'ziki_analytics'
     s3_output = 's3://ziki-athena-query-results/athena-results/'
