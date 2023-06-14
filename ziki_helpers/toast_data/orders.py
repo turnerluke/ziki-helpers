@@ -23,7 +23,7 @@ def date_string_from_int(date_int: int) -> str:
     return f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:]}"
 
 
-def sales_and_payments_from_raw_order_data(data) -> tuple[pd.DataFrame, pd.DataFrame]:
+def sales_and_payments_from_raw_order_data(data: list[dict]) -> tuple[pd.DataFrame, pd.DataFrame]:
     df = pd.DataFrame(data)
     if df.empty:
         return pd.DataFrame(), pd.DataFrame()
