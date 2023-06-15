@@ -70,6 +70,7 @@ def save_df_as_csv(df, bucket_name, file_key):
     # Check if the file was successfully saved
     assert response['ResponseMetadata']['HTTPStatusCode'] == 200, "File was not successfully saved to S3"
 
+
 def save_df_as_parquet(df, bucket_name, file_key):
     # Convert dataframe to CSV string
     csv_buffer = io.StringIO()
@@ -136,5 +137,20 @@ def dataframe_to_s3_with_date_partition(df: pd.DataFrame, bucket_name: str, tabl
     s3.put_object(Bucket=bucket_name, Key=filepath, Body=out_buffer.getvalue())
 
 
+def download_files_with_prefix(bucket_name: str, prefix: str) -> None:
+    """
+    Download all files with a certain prefix from an S3 bucket.
+    :param bucket_name:
+    :param prefix:
+    :return:
+    """
+    # Get the list of files
+    files = s3.list_objects_v2(Bucket=bucket_name, Prefix=prefix)['Contents']
+
+    # Download each file
+    for file in files:
+        s3.download_file(bucket_name, file['Key'], file['Key'])
+
+
 if __name__ == '__main__':
-    print(type(get_parquet_as_df('ziki-analytics-tables', 'sales/year=2023/month=5/day=30/data.parquet.gzip')))
+    download_files_with_prefix('ziki-analytics-config', 'dynamodb_stream_event')
