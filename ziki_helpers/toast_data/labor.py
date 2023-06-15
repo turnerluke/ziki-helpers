@@ -1,5 +1,6 @@
 import json
 import datetime as dt
+import decimal
 
 import pandas as pd
 
@@ -10,7 +11,8 @@ def time_entries_and_start_dates_from_labor_data(data, start_dates=None):
     labor = pd.DataFrame(data)
 
     # Remove deleted
-    labor = labor.loc[~labor['deleted']]
+    if 'deleted' in labor.columns:
+        labor = labor.loc[~labor['deleted']]
 
     # Sanity checks
     assert labor['deletedDate'].isna().all(), 'Deleted entries remain'
@@ -81,4 +83,15 @@ def time_entries_and_start_dates_from_labor_data(data, start_dates=None):
     # Denote training entries
     labor['isTraining'] = labor['businessDate'] < (labor['startDate'] + dt.timedelta(days=14))
     labor = labor.drop(columns=['startDate'])
+
+    # Convert businessDate to str of YYYY-MM-DD format
+    labor['businessDate'] = labor['businessDate'].dt.strftime('%Y-%m-%d')
+
+    # Handle Decimals
+    labor['regularHours'] = labor['regularHours'].apply(lambda x: decimal.Decimal(x).quantize(decimal.Decimal('0.00')))
+    labor['overtimeHours'] = labor['overtimeHours'].apply(lambda x: decimal.Decimal(x).quantize(decimal.Decimal('0.00')))
+
+    labor['regularPay'] = labor['regularPay'].apply(lambda x: decimal.Decimal(x).quantize(decimal.Decimal('0.00')))
+    labor['overtimePay'] = labor['overtimePay'].apply(lambda x: decimal.Decimal(x).quantize(decimal.Decimal('0.00')))
+
     return labor, start_dates
