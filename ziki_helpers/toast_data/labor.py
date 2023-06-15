@@ -7,7 +7,8 @@ import pandas as pd
 from ziki_helpers.aws.dynamodb import get_entire_table
 
 
-def time_entries_and_start_dates_from_labor_data(data, start_dates=None):
+def time_entries_and_start_dates_from_labor_data(data: list[dict], start_dates: pd.DataFrame = None) -> \
+        tuple(pd.DataFrame, pd.DataFrame):
     labor = pd.DataFrame(data)
 
     # Remove deleted
