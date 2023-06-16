@@ -1,6 +1,7 @@
 import pandas as pd
 
 from gspread import Spreadsheet
+from gspread.exceptions import SpreadsheetNotFound
 
 from .auth import get_authenticated_gspread_client
 
@@ -11,8 +12,13 @@ gc = get_authenticated_gspread_client()
 
 def get_gspreadsheet(ss_name: str) -> Spreadsheet:
     """Given a Google Sheet name, returns the sheet as a gspread object."""
-    spreadsheet = gc.open(ss_name)
-    return spreadsheet
+    try:
+        spreadsheet = gc.open(ss_name)
+        return spreadsheet
+    except SpreadsheetNotFound as e:
+        raise ValueError(f"Spreadsheet: {ss_name} not found. \n"
+                         f"Likely needs to be shared with: turner-gspread@ziki-analytics.iam.gserviceaccount.com")
+
 
 
 def get_gsheet_as_df(sheetname: str) -> pd.DataFrame:
