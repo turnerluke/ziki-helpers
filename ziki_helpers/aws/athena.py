@@ -1,5 +1,6 @@
 import time
 from decimal import Decimal
+from warnings import warn
 
 import boto3
 import pandas as pd
@@ -10,23 +11,34 @@ pd.set_option('display.max_columns', None)
 athena_client = boto3.client('athena', region_name='us-east-1')
 
 
-def query_athena_and_get_results(query, database, output_location):
+def repair_table(table_name: str, database: str) -> None:
+    """
+    Repair a table in Athena. Needs to be run when a table has folders added to S3 for a new entry in the schema:
+    ie. a new year, month, day, etc.
+    """
+    repair_command = f"MSCK REPAIR TABLE {table_name}"
+    query_athena_wait_for_success(repair_command, database, f's3://ziki-athena-query-results/repair-table-{table_name}/')
+
+
+def query_athena_wait_for_success(query: str, database: str, output_location: str = None) -> str:
     # Start the query execution
+    params = {'QueryString': query, 'QueryExecutionContext': {'Database': database}}
+    if output_location is not None:
+        params['ResultConfiguration'] = {'OutputLocation': output_location}
     response = athena_client.start_query_execution(
-        QueryString=query,
-        QueryExecutionContext={
-            'Database': database
-        },
-        ResultConfiguration={
-            'OutputLocation': output_location
-        }
+        **params
     )
 
     # Get the query execution ID
     query_execution_id = response['QueryExecutionId']
+    if 'QueryExecution' not in response:
+        assert response['ResponseMetadata']['HTTPStatusCode'] == 200
+        return query_execution_id
+
+    status = response['QueryExecution']['Status']['State']
 
     # Wait for the query to finish
-    while True:
+    while status in ['QUEUED', 'RUNNING']:
         response = athena_client.get_query_execution(
             QueryExecutionId=query_execution_id
         )
@@ -41,6 +53,10 @@ def query_athena_and_get_results(query, database, output_location):
     if status != 'SUCCEEDED':
         raise Exception(f"Query execution failed. Status: {status}. Response: {response}")
 
+    return query_execution_id
+
+
+def get_athena_result_from_execution_id(query_execution_id):
     # Get the first response page
     response = athena_client.get_query_results(
         QueryExecutionId=query_execution_id
@@ -69,6 +85,21 @@ def query_athena_and_get_results(query, database, output_location):
         # Check if there are more results available
         next_token = response.get('NextToken')
 
+    return query_results, columns, dtypes
+
+
+def query_athena_and_get_results(query, database, output_location):
+    warn("query_athena_and_get_results is deprecated. Use query_athena_get_results_as_df instead.")
+    return query_athena_get_results_as_df(query, database, output_location)
+
+
+def query_athena_get_results_as_df(query: str, database: str, output_location: str) -> pd.DataFrame:
+    """
+
+    """
+    query_execution_id = query_athena_wait_for_success(query, database, output_location)
+    query_results, columns, dtypes = get_athena_result_from_execution_id(query_execution_id)
+
     # Create a Pandas DataFrame with the query results
     df = pd.DataFrame(query_results, columns=columns)
 
@@ -90,53 +121,6 @@ def query_athena_and_get_results(query, database, output_location):
 
     return df
 
-# def query_athena_and_get_results(query, database, output_location):
-#
-#     # Start the query execution
-#     response = athena_client.start_query_execution(
-#         QueryString=query,
-#         QueryExecutionContext={
-#             'Database': database
-#         },
-#         ResultConfiguration={
-#             'OutputLocation': output_location
-#         }
-#     )
-#
-#     # Get the query execution ID
-#     query_execution_id = response['QueryExecutionId']
-#
-#     # Wait for the query to finish
-#     while True:
-#         response = athena_client.get_query_execution(
-#             QueryExecutionId=query_execution_id
-#         )
-#         status = response['QueryExecution']['Status']['State']
-#
-#         if status in ['SUCCEEDED', 'FAILED', 'CANCELLED']:
-#             break
-#
-#         time.sleep(5)  # Wait for 5 seconds before checking the status again
-#
-#     # Check if the query succeeded
-#     if status != 'SUCCEEDED':
-#         raise Exception(f"Query execution failed. Status: {status}. Response: {response}")
-#
-#     # Retrieve the query results
-#     response = athena_client.get_query_results(
-#         QueryExecutionId=query_execution_id
-#     )
-#
-#     # Parse the query results into a Pandas DataFrame
-#     columns = [col['Label'] for col in response['ResultSet']['ResultSetMetadata']['ColumnInfo']]
-#     rows = []
-#
-#     for row in response['ResultSet']['Rows'][1:]:
-#         rows.append([data['VarCharValue'] if 'VarCharValue' in data else '' for data in row['Data']])
-#
-#     df = pd.DataFrame(rows, columns=columns)
-#
-#     return df
 
 
 if __name__ == '__main__':
@@ -151,12 +135,4 @@ if __name__ == '__main__':
     # df = query_athena_and_get_results(query, database, s3_output)
     # print(df)
 
-    query = """
-    SELECT * 
-    FROM "sales"
-    ;
-    """
-    database = 'ziki_analytics'
-    s3_output = 's3://ziki-athena-query-results/athena-results/'
-    df = query_athena_and_get_results(query, database, s3_output)
-    print(df)
+    repair_table('time_entries', 'ziki_analytics')
