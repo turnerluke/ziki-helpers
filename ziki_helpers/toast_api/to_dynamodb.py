@@ -19,6 +19,7 @@ orders_url = f'{TOAST_API_SERVER}/orders/v2/ordersBulk'
 labor_url = f'{TOAST_API_SERVER}/labor/v1/timeEntries'
 dining_option_url = f'{TOAST_API_SERVER}/config/v2/diningOptions'
 
+# Stores the last time orders were written to DynamoDB
 S3_BUCKET = 'ziki-dataflow'
 
 
@@ -55,7 +56,7 @@ def to_hashable(obj):
         return obj
 
 
-def remove_duplicates(json_list):
+def remove_duplicates(json_list: list[dict]) -> list[dict]:
     """Remove duplicates from a list of JSON dictionaries."""
     seen = set()
     unique = []
@@ -97,7 +98,7 @@ class ToastDataFlow:
         self.locations = get_entire_table('locations')
         self.toast_token = ToastToken('s3')
 
-    def write_orders_by_business_date(self, business_date) -> None:
+    def write_orders_by_business_date(self, business_date: int) -> None:
         print(f"Business Date: {date_int_to_dashed_string(business_date)}")
 
         table = boto3.resource('dynamodb', region_name='us-east-1').Table('orders')
@@ -157,7 +158,7 @@ class ToastDataFlow:
         business_date = int(yesterday.strftime('%Y%m%d'))
         self.write_orders_by_business_date(business_date)
 
-    def write_orders_by_date_range(self, start, end) -> None:
+    def write_orders_by_date_range(self, start: dt.date, end: dt.date) -> None:
         dates = get_date_range(start, end)
         for date in dates:
             self.write_orders_by_business_date(date)
@@ -168,44 +169,44 @@ class ToastDataFlow:
 
         self.write_labor_by_business_date(business_date)
 
-    def write_labor_by_date_range(self, start, end) -> None:
+    def write_labor_by_date_range(self, start: dt.date, end: dt.date) -> None:
         dates = get_date_range(start, end)
         for date in dates:
             self.write_labor_by_business_date(date)
 
-    def write_labor_by_business_date(self, business_date):
+    def write_labor_by_business_date(self, business_date: int):
         print(f"Business Date: {date_int_to_dashed_string(business_date)}")
         table = boto3.resource('dynamodb', region_name='us-east-1').Table('labor')
-        with table.batch_writer() as batch:
 
-            for location in self.locations:
-                if not location['info'][0]['address']:
-                    continue
+        for location in self.locations:
+            if not location['info'][0]['address']:
+                continue
 
-                location_guid = location['guid']
-                print("location: ", location['info'][-1]['id'])
-                # Query the orders
-                query = {
-                    "businessDate": business_date,
-                }
-                headers = {
-                    **self.toast_token,
-                    "Toast-Restaurant-External-ID": location_guid,
-                }
+            location_guid = location['guid']
+            print("location: ", location['info'][-1]['id'])
+            # Query the orders
+            query = {
+                "businessDate": business_date,
+            }
+            headers = {
+                **self.toast_token,
+                "Toast-Restaurant-External-ID": location_guid,
+            }
 
-                response = requests.get(labor_url, headers=headers, params=query).json()
+            response = requests.get(labor_url, headers=headers, params=query).json()
 
-                print('Query Size: ', len(response))
-                if type(response) == dict:
-                    print("Error Response Occurred: ")
-                    print(response)
-                    raise ValueError
+            print('Query Size: ', len(response))
+            if type(response) == dict:
+                print("Error Response Occurred: ")
+                print(response)
+                raise ValueError
 
-                if len(location['info']) == 1:
-                    location_id = location['info'][0]['id']
-                else:
-                    location_id = location_id_from_date(location['info'], business_date)
+            if len(location['info']) == 1:
+                location_id = location['info'][0]['id']
+            else:
+                location_id = location_id_from_date(location['info'], business_date)
 
+            with table.batch_writer() as batch:
                 for entry in response:
                     entry['location'] = location_id
                     entry['businessDate'] = int(entry['businessDate'])
@@ -213,15 +214,13 @@ class ToastDataFlow:
                     batch.put_item(
                         Item=item
                     )
-                print("Done with location: ", location['info'][-1]['id'])
+            print("Done with location: ", location['info'][-1]['id'])
 
         print('Done')
 
-    def write_orders_to_now(self):
-        start = (
-                dt.datetime.fromisoformat(read_from_s3(S3_BUCKET, 'last_updated_time_orders.txt')) - TIME_OVERLAP_BUFFER
-        ).isoformat(timespec='milliseconds')
-        end = pytz.timezone('US/Central').localize(dt.datetime.now()).isoformat(timespec='milliseconds')
+    def write_orders_between_times(self, start: dt.datetime, end: dt.datetime) -> None:
+        start = start.isoformat(timespec='milliseconds')
+        end = end.isoformat(timespec='milliseconds')
         table = boto3.resource('dynamodb', region_name='us-east-1').Table('orders')
 
         for location in self.locations:
@@ -273,13 +272,19 @@ class ToastDataFlow:
             print()
 
         print('Done')
-        # Write the last updated time to S3
-        write_to_s3(S3_BUCKET, 'last_updated_time_orders.txt', end)
 
-    def write_labor_to_now(self):
-        start = dt.datetime.fromisoformat(read_from_s3(S3_BUCKET, 'last_updated_time_labor.txt')) - \
-                TIME_OVERLAP_BUFFER
+    def write_orders_to_now(self):
+        # Get the last updated time from S3
+        start = dt.datetime.fromisoformat(read_from_s3(S3_BUCKET, 'last_updated_time_orders.txt')) - TIME_OVERLAP_BUFFER
         end = pytz.timezone('US/Central').localize(dt.datetime.now())
+
+        # Write the orders between the last updated time and now
+        self.write_orders_between_times(start, end)
+
+        # Write the last updated time to S3
+        write_to_s3(S3_BUCKET, 'last_updated_time_orders.txt', end.isoformat(timespec='milliseconds'))
+
+    def write_labor_between_times(self, start: dt.datetime, end: dt.datetime) -> None:
         table = boto3.resource('dynamodb', region_name='us-east-1').Table('labor')
 
         for location in self.locations:
@@ -311,14 +316,14 @@ class ToastDataFlow:
                     raise ValueError
                 if response:
                     with table.batch_writer() as batch:
-                        for order in response:
+                        for entry in response:
                             if len(location['info']) == 1:
                                 location_id = location['info'][0]['id']
                             else:
-                                location_id = location_id_from_date(location['info'], order['businessDate'])
-                            order['location'] = location_id
-                            order['businessDate'] = int(order['businessDate'])
-                            item = json.loads(json.dumps(order), parse_float=Decimal)
+                                location_id = location_id_from_date(location['info'], entry['businessDate'])
+                            entry['location'] = location_id
+                            entry['businessDate'] = int(entry['businessDate'])
+                            item = json.loads(json.dumps(entry), parse_float=Decimal)
                             batch.put_item(
                                 Item=item
                             )
@@ -328,6 +333,15 @@ class ToastDataFlow:
             print()
 
         print('Done')
+
+    def write_labor_to_now(self):
+        # Get the last updated time from S3
+        start = dt.datetime.fromisoformat(read_from_s3(S3_BUCKET, 'last_updated_time_labor.txt')) - TIME_OVERLAP_BUFFER
+        end = pytz.timezone('US/Central').localize(dt.datetime.now())
+
+        # Write the labor between the last updated time and now
+        self.write_labor_between_times(start, end)
+
         # Write the last updated time to S3
         write_to_s3(S3_BUCKET, 'last_updated_time_labor.txt', end.isoformat(timespec='milliseconds'))
 
@@ -383,4 +397,4 @@ class ToastDataFlow:
 
 if __name__ == '__main__':
     flow = ToastDataFlow()
-    flow.write_yesterday_orders()
+    flow.write_labor_to_now()
