@@ -14,11 +14,13 @@ def time_entries_and_start_dates_from_labor_data(data: list[dict], start_dates: 
     # Remove deleted
     if 'deleted' in labor.columns:
         labor = labor.loc[~labor['deleted']]
+        if labor.empty:
+            return pd.DataFrame(), start_dates
 
-    # Sanity checks
-    assert labor['deletedDate'].isna().all(), 'Deleted entries remain'
-    assert (~labor['deleted']).all(), 'Deleted entries remain'
-    assert labor['shiftReference'].isna().all(), 'Shift reference showed up.'
+        # Sanity checks
+        assert labor['deletedDate'].isna().all(), 'Deleted entries remain'
+        assert (~labor['deleted']).all(), 'Deleted entries remain'
+        assert labor['shiftReference'].isna().all(), 'Shift reference showed up.'
 
     # Trim to relevant columns
     labor = labor[
