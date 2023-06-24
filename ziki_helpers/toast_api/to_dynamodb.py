@@ -397,4 +397,4 @@ class ToastDataFlow:
 
 if __name__ == '__main__':
     flow = ToastDataFlow()
-    flow.write_labor_to_now()
+    flow.write_yesterday_labor()
