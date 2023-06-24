@@ -31,9 +31,12 @@ def query_athena_wait_for_success(query: str, database: str, output_location: st
 
     # Get the query execution ID
     query_execution_id = response['QueryExecutionId']
-    if 'QueryExecution' not in response:
+    while 'QueryExecution' not in response:
         assert response['ResponseMetadata']['HTTPStatusCode'] == 200
-        return query_execution_id
+        response = athena_client.get_query_execution(
+            QueryExecutionId=query_execution_id
+        )
+        #return query_execution_id
 
     status = response['QueryExecution']['Status']['State']
 
@@ -124,15 +127,23 @@ def query_athena_get_results_as_df(query: str, database: str, output_location: s
 
 
 if __name__ == '__main__':
-    # query = """
-    # SELECT *
-    # FROM "sales"
-    # WHERE year = 2023 and month = 6 and day = 10
-    # limit 10;
-    # """
-    # database = 'ziki_analytics'
-    # s3_output = 's3://ziki-athena-query-results/athena-results/'
-    # df = query_athena_and_get_results(query, database, s3_output)
-    # print(df)
+    query = (
+    """
+    SELECT DISTINCT
+        date,
+        date_add('DAY', 7-day_of_week(date), date) AS week
+    FROM (
+        SELECT
+            date_parse(CONCAT(CAST(year AS VARCHAR), '-', CAST(month AS VARCHAR), '-', CAST(day AS VARCHAR)), '%Y-%m-%d') AS date
+        FROM
+            sales
+    ) AS sub
+    LIMIT 10;
+    """
+    )
+    database = 'ziki_analytics'
+    s3_output = 's3://ziki-athena-query-results/athena-results/'
 
-    repair_table('time_entries', 'ziki_analytics')
+    df = query_athena_get_results_as_df(query, database, s3_output)
+
+    print(df)
