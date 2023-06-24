@@ -24,8 +24,9 @@ def time_entries_and_start_dates_from_labor_data(data: list[dict], start_dates: 
 
     # Trim to relevant columns
     labor = labor[
-        ['employeeReference', 'jobReference', 'inDate', 'outDate', 'businessDate', 'hourlyWage', 'regularHours',
-         'overtimeHours', 'guid']]
+        ['location', 'employeeReference', 'jobReference', 'inDate', 'outDate', 'businessDate', 'hourlyWage',
+         'regularHours', 'overtimeHours', 'guid']
+    ]
 
     # Unpack employee and job guids from reference objects
     labor['employeeGuid'] = labor['employeeReference'].apply(pd.Series)['guid']
