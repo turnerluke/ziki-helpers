@@ -30,7 +30,11 @@ def time_entries_and_start_dates_from_labor_data(data: list[dict], start_dates: 
 
     # Unpack employee and job guids from reference objects
     labor['employeeGuid'] = labor['employeeReference'].apply(pd.Series)['guid']
-    labor['jobGuid'] = labor['jobReference'].apply(pd.Series)['guid']
+    job_reference = labor['jobReference'].apply(pd.Series)
+    if 'guid' in job_reference.columns:
+        labor['jobGuid'] = job_reference['guid']
+    else:
+        labor['jobGuid'] = None
     labor = labor.drop(columns=['employeeReference', 'jobReference'])
 
     # Get employee info
@@ -87,6 +91,7 @@ def time_entries_and_start_dates_from_labor_data(data: list[dict], start_dates: 
     # Denote training entries
     labor['isTraining'] = labor['businessDate'] < (labor['startDate'] + dt.timedelta(days=14))
     labor = labor.drop(columns=['startDate'])
+    labor['isTraining'] = labor['isTraining'].astype(int)
 
     # Convert businessDate to str of YYYY-MM-DD format
     labor['businessDate'] = labor['businessDate'].dt.strftime('%Y-%m-%d')
