@@ -54,7 +54,8 @@ def query_athena_wait_for_success(query: str, database: str, output_location: st
 
     # Check if the query succeeded
     if status != 'SUCCEEDED':
-        raise Exception(f"Query execution failed. Status: {status}. Response: {response}")
+        error_msg = response['QueryExecution']['Status'].get('StateChangeReason')
+        raise Exception(f"Query execution failed.\nStatus: {status}\nError:\n{error_msg}")
 
     return query_execution_id
 
@@ -127,23 +128,49 @@ def query_athena_get_results_as_df(query: str, database: str, output_location: s
 
 
 if __name__ == '__main__':
-    query = (
-    """
-    SELECT DISTINCT
-        date,
-        date_add('DAY', 7-day_of_week(date), date) AS week
-    FROM (
-        SELECT
-            date_parse(CONCAT(CAST(year AS VARCHAR), '-', CAST(month AS VARCHAR), '-', CAST(day AS VARCHAR)), '%Y-%m-%d') AS date
-        FROM
-            sales
-    ) AS sub
-    LIMIT 10;
-    """
+    import datetime as dt
+    last_sunday = dt.date.today() - dt.timedelta(days=dt.date.today().weekday() + 1)
+
+    early_cutoff = last_sunday - dt.timedelta(days=4 * 7)
+
+    # Get sales by location & week ending
+    q = """
+    WITH earliest_dates AS (
+      SELECT
+        location,
+        MIN(CAST(CAST(year AS VARCHAR) || '-' || CAST(month AS VARCHAR) || '-' || CAST(day AS VARCHAR) AS DATE)) AS earliest_date
+      FROM
+        sales
+      GROUP BY
+        location
+    ),
+    sales_with_days_since_opening AS (
+      SELECT
+        s.location,
+        SUM(s.gross) AS total_gross,
+        date_diff('day', e.earliest_date, CAST(CAST(s.year AS VARCHAR) || '-' || CAST(s.month AS VARCHAR) || '-' || CAST(s.day AS VARCHAR) AS DATE)) AS days_since_opening
+      FROM
+        sales s
+      JOIN
+        earliest_dates e ON s.location = e.location
+      GROUP BY
+        s.location,
+        e.earliest_date
     )
+    SELECT
+      location,
+      total_gross,
+      days_since_opening
+    FROM
+      sales_with_days_since_opening
+    ORDER BY
+      location;
+
+    """
+
     database = 'ziki_analytics'
     s3_output = 's3://ziki-athena-query-results/athena-results/'
 
-    df = query_athena_get_results_as_df(query, database, s3_output)
+    df = query_athena_get_results_as_df(q, database, s3_output)
 
     print(df)
