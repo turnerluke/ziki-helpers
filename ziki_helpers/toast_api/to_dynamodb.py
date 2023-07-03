@@ -397,4 +397,6 @@ class ToastDataFlow:
 
 if __name__ == '__main__':
     flow = ToastDataFlow()
-    flow.write_yesterday_labor()
+    start = dt.datetime.now() - dt.timedelta(days=10)
+    end = dt.datetime.now()
+    flow.write_labor_by_date_range(start, end)

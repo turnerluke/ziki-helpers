@@ -20,7 +20,6 @@ def get_gspreadsheet(ss_name: str) -> Spreadsheet:
                          f"Likely needs to be shared with: turner-gspread@ziki-analytics.iam.gserviceaccount.com")
 
 
-
 def get_gsheet_as_df(sheetname: str) -> pd.DataFrame:
     """Given a Google Sheet name, returns the sheet as a pandas DataFrame. Concatenates all worksheets."""
     ss = get_gspreadsheet(sheetname)
@@ -49,7 +48,3 @@ def df_to_worksheet(df: pd.DataFrame, sheetname: str, worksheet: str, clear_old_
 
 def get_all_spreadsheet_names():
     return [sheet['name'] for sheet in gc.list_spreadsheet_files()]
-
-
-if __name__ == '__main__':
-    print(get_all_spreadsheet_names())

@@ -117,7 +117,3 @@ def get_authenticated_google_credentials():
         write_to_s3(CONFIG_S3_BUCKET, auth_creds_file_name, credentials.to_json())
 
     return credentials
-
-
-if __name__ == '__main__':
-    gcreds = get_authenticated_google_credentials()

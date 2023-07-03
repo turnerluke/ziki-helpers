@@ -14,7 +14,7 @@ def get_presentation_from_id(slides_id: str) -> gslides.Presentation:
     :param slides_id: Google Slides presentation ID
     :return: Google Slides presentation
     """
-    return gslides.Presentation(slides_id)
+    return gslides.Presentation.get(slides_id)
 
 
 def fill_presentation_template(presentation: gslides.Presentation, data: dict) -> None:
