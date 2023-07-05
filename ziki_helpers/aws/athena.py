@@ -97,7 +97,11 @@ def query_athena_and_get_results(query, database, output_location):
     return query_athena_get_results_as_df(query, database, output_location)
 
 
-def query_athena_get_results_as_df(query: str, database: str, output_location: str) -> pd.DataFrame:
+def query_athena_get_results_as_df(
+        query: str,
+        database: str = 'ziki_analytics',
+        output_location: str = 's3://ziki-athena-query-results/athena-results/'
+) -> pd.DataFrame:
     """
 
     """
