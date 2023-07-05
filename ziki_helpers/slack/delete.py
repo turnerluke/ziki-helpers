@@ -1,3 +1,5 @@
+import time
+
 from slack import WebClient
 from slack.errors import SlackApiError
 
@@ -14,6 +16,7 @@ def delete_messages(token, channel):
 
         for message in messages:
             while True:
+                time.sleep(.4)
                 try:
                     timestamp = message['ts']
                     response = client.chat_delete(channel=channel, ts=timestamp)
