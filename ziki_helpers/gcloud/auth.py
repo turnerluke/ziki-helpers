@@ -110,10 +110,19 @@ def get_authenticated_google_credentials():
     # Delete temporary auth_creds file
     os.remove(temp_auth_creds_path)
 
-    if not credentials or credentials.invalid:
-        flow = client.flow_from_clientsecrets(google_client_secrets, scopes)
+    if not credentials or credentials.invalid or credentials.access_token_expired:
+        # Store secrets locally
+        temp_secrets_path = '/tmp/google-client-secrets.json'
+        with open(temp_secrets_path, 'w') as temp_file:
+            json.dump(google_client_secrets, temp_file)
+        flow = client.flow_from_clientsecrets(temp_secrets_path, scopes)
         credentials = tools.run_flow(flow, store)
-    else:
+        # Delete temporary auth_creds file
+        os.remove(temp_auth_creds_path)
         write_to_s3(CONFIG_S3_BUCKET, auth_creds_file_name, credentials.to_json())
 
     return credentials
+
+
+if __name__ == '__main__':
+    print(get_authenticated_google_credentials())
