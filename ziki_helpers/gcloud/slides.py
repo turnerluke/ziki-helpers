@@ -1,7 +1,9 @@
+from typing import Union
+
+from googleapiclient.discovery import build
 
 import gslides
 from gslides import Presentation
-
 
 from .auth import get_authenticated_google_credentials
 
@@ -27,6 +29,41 @@ def fill_presentation_template(presentation: gslides.Presentation, data: dict) -
     :return:
     """
     presentation.template(mapping=data)
+
+
+def copy_slides_presentation_return_new_id(
+        tempate_id: str,
+        new_presentation_name: str,
+        email='turner@ziki.kitchen'
+        ) -> Union[str, None]:
+    # Authenticate and create the API client
+    credentials = get_authenticated_google_credentials()
+    slides_service = build('slides', 'v1', credentials=credentials)
+    drive_service = build('drive', 'v3', credentials=credentials)
+
+    try:
+        # Copy the presentation using the Drive API
+        drive_response = drive_service.files().copy(fileId=tempate_id, body={'name': new_presentation_name}).execute()
+        new_presentation_id = drive_response['id']
+
+        # Update the copied presentation's ownership and permissions
+        drive_service.permissions().create(
+            fileId=new_presentation_id,
+            body={'type': 'user', 'role': 'writer', 'emailAddress': email}
+        ).execute()
+
+        # Update the copied presentation's ownership and permissions
+        slides_service.presentations().batchUpdate(
+            presentationId=new_presentation_id,
+            body={'requests': [{'deleteObject': {'objectId': 'p'}}]}
+        ).execute()
+
+        print(f"New presentation created with ID: {new_presentation_id}")
+        return new_presentation_id
+
+    except Exception as e:
+        print(f"An error occurred: {e}")
+        return
 
 
 if __name__ == '__main__':
