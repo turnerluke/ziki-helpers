@@ -36,9 +36,9 @@ def copy_slides_presentation_return_new_id(
         new_presentation_name: str,
         email='turner@ziki.kitchen'
         ) -> Union[str, None]:
+
     # Authenticate and create the API client
     credentials = get_authenticated_google_credentials()
-    slides_service = build('slides', 'v1', credentials=credentials)
     drive_service = build('drive', 'v3', credentials=credentials)
 
     # Copy the presentation using the Drive API
@@ -48,50 +48,6 @@ def copy_slides_presentation_return_new_id(
     # Update the copied presentation's ownership and permissions
     drive_service.permissions().create(
         fileId=new_presentation_id,
-        body={'type': 'user', 'role': 'writer', 'emailAddress': 'turner@ziki.kitchen'}
+        body={'type': 'user', 'role': 'writer', 'emailAddress': email}
     ).execute()
-
-    # Get the slides from the original presentation
-    presentation = slides_service.presentations().get(presentationId=tempate_id).execute()
-    slides = presentation['slides']
-
-    # Iterate over slides and copy the content to the new presentation
-    for slide in slides:
-        slide_id = slide['objectId']
-
-        # Get the page elements from the original slide
-        page_elements = slides_service.presentations().pages().get(
-            presentationId=tempate_id,
-            pageObjectId=slide_id
-        ).execute()['pageElements']
-
-        #Create a blank slide in the new presentation
-        new_slide = slides_service.presentations().batchUpdate(
-            presentationId=new_presentation_id,
-            body={
-                'requests': [{
-                    'createSlide': {
-                        'objectId': slide_id,
-                        'insertionIndex': '0',
-                        'slideLayoutReference': {
-                            'predefinedLayout': 'BLANK'
-                        }
-                    }
-                }]
-            }
-        ).execute()['replies'][0]['createSlide']['objectId']
-
-        # Copy the content from the original slide to the new slide
-        slides_service.presentations().pages().batchUpdate(
-            presentationId=new_presentation_id,
-            body={
-                'requests': [{
-                    'duplicateObject': {
-                        'objectId': element['objectId'],
-                        'objectIds': {slide_id: new_slide}
-                    }
-                } for element in page_elements]
-            }
-        ).execute()
-
     return new_presentation_id
