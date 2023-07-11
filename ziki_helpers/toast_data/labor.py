@@ -41,6 +41,8 @@ def time_entries_and_start_dates_from_labor_data(data: list[dict], start_dates: 
         labor['jobGuid'] = job_reference['guid']
     else:
         labor['jobGuid'] = None
+    # Fill nulls
+    labor['jobGuid'] = labor['jobGuid'].fillna('')
     labor = labor.drop(columns=['employeeReference', 'jobReference'])
 
     # Get employee info
