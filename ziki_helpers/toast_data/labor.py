@@ -59,6 +59,7 @@ def time_entries_and_start_dates_from_labor_data(data: list[dict], start_dates: 
         suffixes=('TimeEntry', 'Employee')
     )
     labor = labor.drop(columns=['guidEmployee'])
+    labor['chosenName'] = labor['chosenName'].fillna('')
 
     # Calculate pay
     labor['regularPay'] = (
