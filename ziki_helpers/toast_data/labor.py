@@ -62,6 +62,11 @@ def time_entries_and_start_dates_from_labor_data(data: list[dict], start_dates: 
     )
     labor = labor.drop(columns=['guidEmployee'])
     labor['chosenName'] = labor['chosenName'].fillna('')
+    # Strip whitespace
+    labor['chosenName'] = labor['chosenName'].str.strip()
+    labor['firstName'] = labor['firstName'].str.strip()
+    labor['lastName'] = labor['lastName'].str.strip()
+
 
     # Calculate pay
     labor['regularPay'] = (
@@ -113,7 +118,7 @@ def time_entries_and_start_dates_from_labor_data(data: list[dict], start_dates: 
     return labor, start_dates
 
 
-# if __name__ == '__main__':
-#     from ziki_helpers.aws.dynamodb import query_on_business_date
-#     data = query_on_business_date('labor', 20230709)
-#     labor, start_dates = time_entries_and_start_dates_from_labor_data(data)
+if __name__ == '__main__':
+    from ziki_helpers.aws.dynamodb import query_on_business_date
+    data = query_on_business_date('labor', 20230709)
+    labor, start_dates = time_entries_and_start_dates_from_labor_data(data)
