@@ -118,7 +118,7 @@ def query_athena_get_results_as_df(
         elif dtype == 'integer':
             df[col] = df[col].astype(int)
         elif dtype == 'boolean':
-            df[col] = df[col].astype(bool)
+            df[col].apply(lambda x: x.strip().upper() == 'TRUE')
         elif dtype == 'float':
             df[col] = df[col].astype(float)
         elif dtype == 'double':
@@ -131,50 +131,29 @@ def query_athena_get_results_as_df(
 
 
 
-if __name__ == '__main__':
-    import datetime as dt
-    last_sunday = dt.date.today() - dt.timedelta(days=dt.date.today().weekday() + 1)
-
-    early_cutoff = last_sunday - dt.timedelta(days=4 * 7)
-
-    # Get sales by location & week ending
-    q = """
-    WITH earliest_dates AS (
-      SELECT
-        location,
-        MIN(CAST(CAST(year AS VARCHAR) || '-' || CAST(month AS VARCHAR) || '-' || CAST(day AS VARCHAR) AS DATE)) AS earliest_date
-      FROM
-        sales
-      GROUP BY
-        location
-    ),
-    sales_with_days_since_opening AS (
-      SELECT
-        s.location,
-        SUM(s.gross) AS total_gross,
-        date_diff('day', e.earliest_date, CAST(CAST(s.year AS VARCHAR) || '-' || CAST(s.month AS VARCHAR) || '-' || CAST(s.day AS VARCHAR) AS DATE)) AS days_since_opening
-      FROM
-        sales s
-      JOIN
-        earliest_dates e ON s.location = e.location
-      GROUP BY
-        s.location,
-        e.earliest_date
-    )
-    SELECT
-      location,
-      total_gross,
-      days_since_opening
-    FROM
-      sales_with_days_since_opening
-    ORDER BY
-      location;
-
-    """
-
-    database = 'ziki_analytics'
-    s3_output = 's3://ziki-athena-query-results/athena-results/'
-
-    df = query_athena_get_results_as_df(q, database, s3_output)
-
-    print(df)
+# if __name__ == '__main__':
+#     import datetime as dt
+#     last_sunday = dt.date.today() - dt.timedelta(days=dt.date.today().weekday() + 1)
+#
+#     early_cutoff = last_sunday - dt.timedelta(days=4 * 7)
+#
+#     # Get sales by location & week ending
+#     q = """
+#     SELECT *
+#     FROM time_entries
+#     WHERE
+#         year=2023
+#         AND
+#         month=7
+#         AND
+#         day=10
+#     LIMIT 10
+#     ;
+#     """
+#
+#     database = 'ziki_analytics'
+#     s3_output = 's3://ziki-athena-query-results/athena-results/'
+#
+#     df = query_athena_get_results_as_df(q, database, s3_output)
+#
+#     print(df)
