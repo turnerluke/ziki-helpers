@@ -39,6 +39,9 @@ def query_on_business_date(table, date):
     :param date: dt.date
     :return:
     """
+    if type(table) == str:
+        table = dynamodb.Table(table)
+
     data = []
 
     response = table.query(
