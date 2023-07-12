@@ -110,7 +110,6 @@ def time_entries_and_start_dates_from_labor_data(data: list[dict], start_dates: 
     # Denote training entries
     labor['isTraining'] = labor['businessDate'] < (labor['startDate'] + dt.timedelta(days=14))
     labor = labor.drop(columns=['startDate'])
-    labor['isTraining'] = labor['isTraining'].astype(int)
 
     # Convert businessDate to str of YYYY-MM-DD format
     labor['businessDate'] = labor['businessDate'].dt.strftime('%Y-%m-%d')
