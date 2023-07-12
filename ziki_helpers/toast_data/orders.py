@@ -211,6 +211,9 @@ def sales_and_payments_from_raw_order_data(data: list[dict]) -> tuple[pd.DataFra
         }
     )
 
+    # Add locations back to payments
+    payments['location'] = orders['location']
+
     # Change businessDate integer to YYYY-MM-DD format
     sales['businessDate'] = sales['businessDate'].apply(date_string_from_int)
     payments['paidBusinessDate'] = payments['paidBusinessDate'].apply(date_string_from_int)
@@ -220,3 +223,18 @@ def sales_and_payments_from_raw_order_data(data: list[dict]) -> tuple[pd.DataFra
     sales['tax'] = sales['tax'].apply(lambda x: decimal.Decimal(x).quantize(decimal.Decimal('0.00')))
 
     return sales, payments
+
+
+# if __name__ == '__main__':
+#     # Get some data
+#     import datetime as dt
+#     # Add parent directory to path
+#     import sys
+#     sys.path.append('..')
+#     from aws.dynamodb import query_between_business_dates
+#     table_name = 'orders'
+#     start_date = dt.date(2023, 7, 11)
+#     end_date = dt.date(2023, 7, 11)
+#     data = query_between_business_dates(table_name, start_date, end_date)
+#     sales, payments = sales_and_payments_from_raw_order_data(data)
+#     print(data)
