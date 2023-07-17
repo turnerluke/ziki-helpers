@@ -85,9 +85,17 @@ def sales_and_payments_from_raw_order_data(data: list[dict]) -> tuple[pd.DataFra
 
     assert (check_mask.sum(axis=1) == 1).all(), 'Not exactly one valid check'
 
-    checks = checks.mask(~check_mask).stack().droplevel(level=1).apply(pd.Series)  # Check index shared exactly with orders
+    checks = checks.mask(~check_mask).stack().droplevel(level=1).apply(pd.Series)
+    # Check index is shared exactly with orders
 
-    # Trim down to necessary columns
+    # Get gratuities from checks
+    if 'appliedServiceCharges' in checks.columns:
+        service_charges = checks['appliedServiceCharges'].apply(pd.Series).stack().apply(pd.Series)
+        gratuities = service_charges.loc[service_charges['gratuity']]['chargeAmount'].groupby(level=0).sum()
+    else:
+        gratuities = pd.Series(0, index=checks.index)
+
+    # Trim checks to necessary columns
     checks = checks[['payments', 'amount', 'totalAmount', 'selections', 'taxAmount']]  # TODO: Discounts from appliedDiscounts
 
     # Payments
@@ -101,6 +109,7 @@ def sales_and_payments_from_raw_order_data(data: list[dict]) -> tuple[pd.DataFra
     # Keep only CAPTURED payments
     payments_mask = payments.applymap(payment_valid)
     payments = payments.mask(~payments_mask).stack().apply(pd.Series)
+
 
     if payments.empty:
         return pd.DataFrame(), pd.DataFrame()
@@ -128,6 +137,9 @@ def sales_and_payments_from_raw_order_data(data: list[dict]) -> tuple[pd.DataFra
         payments[['originalProcessingFee', 'amount', 'tipAmount']].groupby(level=0).sum(),
         payments[['checkGuid', 'orderGuid', 'guid', 'paidBusinessDate']].groupby(level=0).head(1).droplevel(level=1)
     ], axis=1)
+    # Add gratuity to payments
+    payments['gratuity'] = 0
+    payments.loc[gratuities.index, 'gratuity'] = gratuities
 
     # Drop voided payments (already gone from payments)
     voided_payments_idx = set(orders.index) - set(payments.index)
@@ -219,8 +231,12 @@ def sales_and_payments_from_raw_order_data(data: list[dict]) -> tuple[pd.DataFra
     payments['paidBusinessDate'] = payments['paidBusinessDate'].apply(date_string_from_int)
 
     # Decimals
-    sales['gross'] = sales['gross'].apply(lambda x: decimal.Decimal(x).quantize(decimal.Decimal('0.00')))
-    sales['tax'] = sales['tax'].apply(lambda x: decimal.Decimal(x).quantize(decimal.Decimal('0.00')))
+    sales_decimal_cols = ['gross', 'tax']
+    for col in sales_decimal_cols:
+        sales[col] = sales[col].apply(lambda x: decimal.Decimal(x).quantize(decimal.Decimal('0.00')))
+    payments_decimal_cols = ['amount', 'tipAmount', 'originalProcessingFee', 'gratuity', 'originalProcessingFee']
+    for col in payments_decimal_cols:
+        payments[col] = payments[col].apply(lambda x: decimal.Decimal(x).quantize(decimal.Decimal('0.00')))
 
     return sales, payments
 
@@ -232,9 +248,12 @@ def sales_and_payments_from_raw_order_data(data: list[dict]) -> tuple[pd.DataFra
 #     import sys
 #     sys.path.append('..')
 #     from aws.dynamodb import query_between_business_dates
+#     query_new_data = True
+#
 #     table_name = 'orders'
-#     start_date = dt.date(2023, 7, 11)
-#     end_date = dt.date(2023, 7, 11)
+#     start_date = dt.date(2023, 7, 10)
+#     end_date = dt.date(2023, 7, 16)
 #     data = query_between_business_dates(table_name, start_date, end_date)
+#
 #     sales, payments = sales_and_payments_from_raw_order_data(data)
 #     print(data)
