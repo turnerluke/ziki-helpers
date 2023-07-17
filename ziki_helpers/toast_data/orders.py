@@ -137,8 +137,8 @@ def sales_and_payments_from_raw_order_data(data: list[dict]) -> tuple[pd.DataFra
         payments[['checkGuid', 'orderGuid', 'guid', 'paidBusinessDate']].groupby(level=0).head(1).droplevel(level=1)
     ], axis=1)
     # Add gratuity to payments
-    payments['gratuity'] = 0
-    payments.loc[gratuities.index, 'gratuity'] = gratuities
+    payments = payments.join(gratuities.rename('gratuity'), how='left')
+    payments['gratuity'] = payments['gratuity'].fillna(0)
 
     # Drop voided payments (already gone from payments)
     voided_payments_idx = set(orders.index) - set(payments.index)
@@ -239,7 +239,7 @@ def sales_and_payments_from_raw_order_data(data: list[dict]) -> tuple[pd.DataFra
 
     return sales, payments
 
-
+#
 # if __name__ == '__main__':
 #     # Get some data
 #     import datetime as dt
@@ -247,11 +247,10 @@ def sales_and_payments_from_raw_order_data(data: list[dict]) -> tuple[pd.DataFra
 #     import sys
 #     sys.path.append('..')
 #     from aws.dynamodb import query_between_business_dates
-#     query_new_data = True
 #
 #     table_name = 'orders'
-#     start_date = dt.date(2023, 7, 10)
-#     end_date = dt.date(2023, 7, 16)
+#     start_date = dt.date(2022, 2, 2)
+#     end_date = dt.date(2022, 2, 2)
 #     data = query_between_business_dates(table_name, start_date, end_date)
 #
 #     sales, payments = sales_and_payments_from_raw_order_data(data)
