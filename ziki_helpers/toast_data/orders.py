@@ -89,10 +89,10 @@ def sales_and_payments_from_raw_order_data(data: list[dict]) -> tuple[pd.DataFra
     # Check index is shared exactly with orders
 
     # Get gratuities from checks
-    if 'appliedServiceCharges' in checks.columns:
+    try:
         service_charges = checks['appliedServiceCharges'].apply(pd.Series).stack().apply(pd.Series)
         gratuities = service_charges.loc[service_charges['gratuity']]['chargeAmount'].groupby(level=0).sum()
-    else:
+    except KeyError:
         gratuities = pd.Series(0, index=checks.index)
 
     # Trim checks to necessary columns
@@ -109,7 +109,6 @@ def sales_and_payments_from_raw_order_data(data: list[dict]) -> tuple[pd.DataFra
     # Keep only CAPTURED payments
     payments_mask = payments.applymap(payment_valid)
     payments = payments.mask(~payments_mask).stack().apply(pd.Series)
-
 
     if payments.empty:
         return pd.DataFrame(), pd.DataFrame()
