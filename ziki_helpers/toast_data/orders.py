@@ -1,6 +1,7 @@
 import json
 import decimal
 import warnings
+from typing import Union
 
 import pandas as pd
 
@@ -18,32 +19,35 @@ class DecimalEncoder(json.JSONEncoder):
 
 
 def date_string_from_int(date_int: int) -> str:
-    """Convert a date integer to a date string."""
+    """Convert a date integer (YYYYMMDD) to a date string (YYYY-MM-DD)."""
     date_str = str(date_int)
     return f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:]}"
 
 
-def sales_and_payments_from_raw_order_data(data: list[dict]) -> tuple[pd.DataFrame, pd.DataFrame]:
-    df = pd.DataFrame(data)
-    if df.empty:
-        return pd.DataFrame(), pd.DataFrame()
+def get_dining_options_mapping() -> dict[str, str]:
+    """Get a mapping of dining option GUIDs to names."""
+    dining_options = get_entire_table('dining_options')
+    return {option['guid']: option['name'] for option in dining_options}
 
+
+def process_orders(orders: pd.DataFrame) -> Union[pd.DataFrame, None]:
+    """Performs preliminary processing of orders."""
     # Get Necessary Mappings
-    dining_options_mapping = {option['guid']: option['name'] for option in get_entire_table('dining_options')}
+    dining_options_mapping = get_dining_options_mapping()
 
     # Trim down to necessary columns
-    orders = df[
+    orders = orders[
         ['location', 'businessDate', 'estimatedFulfillmentDate', 'guid', 'diningOption', 'checks', 'voided', 'deleted']
     ]
 
     # Remove voided and deleted orders
     orders = orders.loc[
         ~orders['voided'] & ~orders['deleted']
-    ]
+        ]
     orders = orders.drop(columns=['voided', 'deleted'])
 
     if orders.empty or orders['diningOption'].apply(pd.Series).empty:
-        return pd.DataFrame(), pd.DataFrame()
+        return None
 
     # Map diningOption
     orders['diningOption'] = orders['diningOption'].apply(pd.Series)['guid']
@@ -51,13 +55,21 @@ def sales_and_payments_from_raw_order_data(data: list[dict]) -> tuple[pd.DataFra
 
     # Remove Deferred Orders (Gift Cards)
     if not orders.loc[orders['diningOption'].isna()].empty:
-        deferred_order_idx = orders.loc[orders['diningOption'].isna()]['checks'].apply(pd.Series).stack().apply(pd.Series)['selections'].apply(pd.Series).stack().apply(pd.Series)['deferred'].index.get_level_values(0)
+        deferred_order_idx = orders.loc[
+            orders['diningOption'].isna(),
+            'checks'
+        ].apply(pd.Series).stack().apply(pd.Series)[
+            'selections'
+        ].apply(pd.Series).stack().apply(pd.Series)[
+            'deferred'
+        ].index.get_level_values(0)
         orders = orders.drop(deferred_order_idx)
 
-    # Checks
-    checks = orders['checks'].apply(pd.Series)
-    orders = orders.drop(columns=['checks'])
+    return orders
 
+
+def get_check_mask(checks: pd.DataFrame) -> pd.DataFrame:
+    """Get a mask of valid checks."""
     def valid_check(check):
         if type(check) == dict:
             if check['voided'] | check['deleted']:
@@ -66,22 +78,88 @@ def sales_and_payments_from_raw_order_data(data: list[dict]) -> tuple[pd.DataFra
         return False
 
     check_mask = checks.applymap(valid_check)
-    no_checks_idxs = check_mask.loc[check_mask.sum(axis=1) == 0].index
-    checks = checks.drop(no_checks_idxs)
-    orders = orders.drop(no_checks_idxs)
-    check_mask = check_mask.drop(no_checks_idxs)
+    return check_mask
 
+
+def get_no_checks_idxs(check_mask: pd.DataFrame) -> pd.Index:
+    """Get the indices of orders with no checks."""
+    no_checks_idxs = check_mask.loc[check_mask.sum(axis=1) == 0].index
+    return no_checks_idxs
+
+
+def get_check_paid_mask(checks: pd.DataFrame) -> pd.DataFrame:
+    """Get a mask of checks that have been paid."""
     def check_paid(check):
         if type(check) == dict:
             return check['paymentStatus'] == 'PAID'
         return False
 
+    check_paid_mask = checks.applymap(check_paid)
+    return check_paid_mask
+
+
+def keep_valid_payments(payments: pd.DataFrame) -> Union[pd.DataFrame, None]:
+    """Keep only valid payments."""
+    def payment_valid(payment):
+        if type(payment) == dict:
+            return payment['paymentStatus'] == 'CAPTURED'
+        return False
+
+    # Keep only CAPTURED payments
+    payments_mask = payments.applymap(payment_valid)
+    payments = payments.mask(~payments_mask).stack().apply(pd.Series)
+
+    if payments.empty:
+        return None
+    return payments
+
+
+def get_full_refund_payments(payments: pd.DataFrame) -> Union[pd.DataFrame, None]:
+    """Get payments with full refunds."""
+    full_refunds = payments.loc[payments['refundStatus'] == 'FULL']
+
+    if full_refunds.empty:
+        return None
+    return full_refunds
+
+
+def get_partial_refund_payments(payments: pd.DataFrame) -> Union[pd.DataFrame, None]:
+    """Get payments with partial refunds."""
+    partial_refunds = payments.loc[payments['refundStatus'] == 'PARTIAL']
+
+    if partial_refunds.empty:
+        return None
+    return partial_refunds
+
+
+def sales_and_payments_from_raw_order_data(data: list[dict]) -> tuple[pd.DataFrame, pd.DataFrame]:
+    df = pd.DataFrame(data)
+    if df.empty:
+        return pd.DataFrame(), pd.DataFrame()
+
+    orders = process_orders(df)
+    if orders is None:
+        return pd.DataFrame(), pd.DataFrame()
+
+    # Get checks from orders
+    checks = orders['checks'].apply(pd.Series)
+    orders = orders.drop(columns=['checks'])
+
+    # Remove orders with no checks
+    check_mask = get_check_mask(checks)
+    no_checks_idxs = get_no_checks_idxs(check_mask)
+
+    checks = checks.drop(no_checks_idxs)
+    orders = orders.drop(no_checks_idxs)
+    check_mask = check_mask.drop(no_checks_idxs)
+
     multi_check_idxs = check_mask.loc[check_mask.sum(axis=1) > 1].index
 
+    # Process orders with multiple checks
     if not multi_check_idxs.empty:
-        paid_mask = checks.loc[multi_check_idxs].applymap(check_paid)
-        assert (paid_mask.sum(axis=1) == 1).all(), "Multi valid checks without exactly one paid."
-        check_mask.loc[multi_check_idxs] = paid_mask
+        check_paid_mask = get_check_paid_mask(checks.loc[multi_check_idxs])
+        assert (check_paid_mask.sum(axis=1) == 1).all(), "Multi valid checks without exactly one paid."
+        check_mask.loc[multi_check_idxs] = check_paid_mask
 
     assert (check_mask.sum(axis=1) == 1).all(), 'Not exactly one valid check'
 
@@ -100,17 +178,10 @@ def sales_and_payments_from_raw_order_data(data: list[dict]) -> tuple[pd.DataFra
 
     # Payments
     payments = checks['payments'].apply(pd.Series)
+    # Remove bad payments
+    payments = keep_valid_payments(payments)
 
-    def payment_valid(payment):
-        if type(payment) == dict:
-            return payment['paymentStatus'] == 'CAPTURED'
-        return False
-
-    # Keep only CAPTURED payments
-    payments_mask = payments.applymap(payment_valid)
-    payments = payments.mask(~payments_mask).stack().apply(pd.Series)
-
-    if payments.empty:
+    if payments is None:
         return pd.DataFrame(), pd.DataFrame()
 
     # Trim down to necessary columns
@@ -120,22 +191,31 @@ def sales_and_payments_from_raw_order_data(data: list[dict]) -> tuple[pd.DataFra
     assert payments['voidInfo'].isna().all(), 'Voided Payments Remain'
 
     # Remove full refunds
-    refund_idx = payments.loc[payments['refundStatus'] == 'FULL'].index.get_level_values(0)
+    full_refunds = get_full_refund_payments(payments)
+    if full_refunds is not None:
+        # Remove orders, checks and payments with full refunds, as if they never happened
+        refund_idx = full_refunds.index.get_level_values(0)
 
-    orders = orders.drop(refund_idx)
-    checks = checks.drop(refund_idx)
-    payments = payments.drop(refund_idx)
+        orders = orders.drop(refund_idx)
+        checks = checks.drop(refund_idx)
+        payments = payments.drop(refund_idx)
+
+    # Get partial refunds:
+    partial_refunds = get_partial_refund_payments(payments)
 
     # Subtract partial refunds
-    if not payments.loc[payments['refundStatus'] == 'PARTIAL'].empty:
-        partial_refunds = payments.loc[payments['refundStatus'] == 'PARTIAL']['refund'].apply(pd.Series)[['tipRefundAmount', 'refundAmount']]
+    if partial_refunds is not None:
+        # Subtract the tip and amount from payments with partial refunds
+        partial_refunds = partial_refunds['refund'].apply(pd.Series)[['tipRefundAmount', 'refundAmount']]
         payments.loc[partial_refunds.index.get_level_values(0), 'tipAmount'] -= partial_refunds['tipRefundAmount']
         payments.loc[partial_refunds.index.get_level_values(0), 'amount'] -= partial_refunds['refundAmount']
 
+    # ???
     payments = pd.concat([
         payments[['originalProcessingFee', 'amount', 'tipAmount']].groupby(level=0).sum(),
         payments[['checkGuid', 'orderGuid', 'guid', 'paidBusinessDate']].groupby(level=0).head(1).droplevel(level=1)
     ], axis=1)
+
     # Add gratuity to payments
     payments = payments.join(gratuities.rename('gratuity'), how='left')
     payments['gratuity'] = payments['gratuity'].fillna(0)
