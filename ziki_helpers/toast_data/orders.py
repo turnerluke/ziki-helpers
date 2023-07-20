@@ -132,6 +132,14 @@ def get_partial_refund_payments(payments: pd.DataFrame) -> Union[pd.DataFrame, N
     return partial_refunds
 
 
+def remove_voided_payments_from_orders_checks(orders: pd.DataFrame, checks: pd.DataFrame, payments: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
+    # Drop voided payments (already gone from payments)
+    voided_payments_idx = set(orders.index) - set(payments.index)
+    orders = orders.drop(voided_payments_idx)
+    checks = checks.drop(voided_payments_idx)
+    return orders, checks
+
+
 def keep_one_valid_check_orders(orders: pd.DataFrame, checks: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     # Remove orders with no checks
     check_mask = get_check_mask(checks)
@@ -163,6 +171,27 @@ def get_gratuitites_from_checks(checks: pd.DataFrame) -> pd.Series:
     except KeyError:
         gratuities = pd.Series(0, index=checks.index)
     return gratuities
+
+
+def remove_voided_selections(selections: pd.DataFrame, orders: pd.DataFrame, payments: pd.DataFrame) \
+        -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    def non_voided_selection(selection):
+        if type(selection) == dict:
+            return not bool(selection['voided'])
+        return False
+
+    # Remove voided selections, trim to only valid
+    selections_mask = selections.applymap(non_voided_selection)
+    voided_selections = selections.loc[(~selections_mask).all(axis=1)].index
+    selections = selections.mask(~selections_mask)
+
+    # Drop where all selections are voided
+    orders = orders.drop(voided_selections)
+    #checks = checks.drop(voided_selections)
+    payments = payments.drop(voided_selections)
+    selections = selections.drop(voided_selections)
+    return orders, payments, selections
+
 
 def sales_and_payments_from_raw_order_data(data: list[dict]) -> tuple[pd.DataFrame, pd.DataFrame]:
     df = pd.DataFrame(data)
@@ -234,28 +263,13 @@ def sales_and_payments_from_raw_order_data(data: list[dict]) -> tuple[pd.DataFra
     payments['gratuity'] = payments['gratuity'].fillna(0)
 
     # Drop voided payments (already gone from payments)
-    voided_payments_idx = set(orders.index) - set(payments.index)
-    orders = orders.drop(voided_payments_idx)
-    checks = checks.drop(voided_payments_idx)
+    orders, checks = remove_voided_payments_from_orders_checks(orders, checks, payments)
 
     # Selections
     selections = checks['selections'].apply(pd.Series)
 
-    def non_voided_selection(selection):
-        if type(selection) == dict:
-            return not bool(selection['voided'])
-        return False
-
-    # Remove voided selections, trim to only valid
-    selections_mask = selections.applymap(non_voided_selection)
-    voided_selections = selections.loc[(~selections_mask).all(axis=1)].index
-    selections = selections.mask(~selections_mask)
-
-    # Drop where all selections are voided
-    orders = orders.drop(voided_selections)
-    #checks = checks.drop(voided_selections)
-    payments = payments.drop(voided_selections)
-    selections = selections.drop(voided_selections)
+    # Remove voided selections
+    orders, payments, selections = remove_voided_selections(selections, orders, payments)
 
     selections = selections.stack().apply(pd.Series)
 
