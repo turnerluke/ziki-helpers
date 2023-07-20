@@ -132,19 +132,7 @@ def get_partial_refund_payments(payments: pd.DataFrame) -> Union[pd.DataFrame, N
     return partial_refunds
 
 
-def sales_and_payments_from_raw_order_data(data: list[dict]) -> tuple[pd.DataFrame, pd.DataFrame]:
-    df = pd.DataFrame(data)
-    if df.empty:
-        return pd.DataFrame(), pd.DataFrame()
-
-    orders = process_orders(df)
-    if orders is None:
-        return pd.DataFrame(), pd.DataFrame()
-
-    # Get checks from orders
-    checks = orders['checks'].apply(pd.Series)
-    orders = orders.drop(columns=['checks'])
-
+def keep_one_valid_check_orders(orders: pd.DataFrame, checks: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     # Remove orders with no checks
     check_mask = get_check_mask(checks)
     no_checks_idxs = get_no_checks_idxs(check_mask)
@@ -164,17 +152,42 @@ def sales_and_payments_from_raw_order_data(data: list[dict]) -> tuple[pd.DataFra
     assert (check_mask.sum(axis=1) == 1).all(), 'Not exactly one valid check'
 
     checks = checks.mask(~check_mask).stack().droplevel(level=1).apply(pd.Series)
-    # Check index is shared exactly with orders
 
-    # Get gratuities from checks
+    return orders, checks
+
+
+def get_gratuitites_from_checks(checks: pd.DataFrame) -> pd.Series:
     try:
         service_charges = checks['appliedServiceCharges'].apply(pd.Series).stack().apply(pd.Series)
         gratuities = service_charges.loc[service_charges['gratuity']]['chargeAmount'].groupby(level=0).sum()
     except KeyError:
         gratuities = pd.Series(0, index=checks.index)
+    return gratuities
+
+def sales_and_payments_from_raw_order_data(data: list[dict]) -> tuple[pd.DataFrame, pd.DataFrame]:
+    df = pd.DataFrame(data)
+    if df.empty:
+        return pd.DataFrame(), pd.DataFrame()
+
+    orders = process_orders(df)
+    if orders is None:
+        return pd.DataFrame(), pd.DataFrame()
+
+    # Get checks from orders
+    checks = orders['checks'].apply(pd.Series)
+    orders = orders.drop(columns=['checks'])
+
+    # Keep only orders with exactly one valid check
+    orders, checks = keep_one_valid_check_orders(orders, checks)
+
+    # Get gratuities from checks
+    gratuities = get_gratuitites_from_checks(checks)
 
     # Trim checks to necessary columns
-    checks = checks[['payments', 'amount', 'totalAmount', 'selections', 'taxAmount']]  # TODO: Discounts from appliedDiscounts
+    checks = checks[
+        ['payments', 'amount', 'totalAmount', 'selections', 'taxAmount']
+    ]
+    # TODO: Discounts from appliedDiscounts
 
     # Payments
     payments = checks['payments'].apply(pd.Series)
@@ -185,7 +198,9 @@ def sales_and_payments_from_raw_order_data(data: list[dict]) -> tuple[pd.DataFra
         return pd.DataFrame(), pd.DataFrame()
 
     # Trim down to necessary columns
-    payments = payments[['originalProcessingFee', 'refundStatus', 'voidInfo', 'checkGuid', 'orderGuid', 'amount', 'tipAmount', 'guid', 'refund', 'paidBusinessDate']]
+    payments = payments[
+        ['originalProcessingFee', 'refundStatus', 'voidInfo', 'checkGuid', 'orderGuid', 'amount', 'tipAmount', 'guid', 'refund', 'paidBusinessDate']
+    ]
 
     # Sanity check
     assert payments['voidInfo'].isna().all(), 'Voided Payments Remain'
@@ -200,10 +215,8 @@ def sales_and_payments_from_raw_order_data(data: list[dict]) -> tuple[pd.DataFra
         checks = checks.drop(refund_idx)
         payments = payments.drop(refund_idx)
 
-    # Get partial refunds:
-    partial_refunds = get_partial_refund_payments(payments)
-
     # Subtract partial refunds
+    partial_refunds = get_partial_refund_payments(payments)
     if partial_refunds is not None:
         # Subtract the tip and amount from payments with partial refunds
         partial_refunds = partial_refunds['refund'].apply(pd.Series)[['tipRefundAmount', 'refundAmount']]
