@@ -153,4 +153,4 @@ def download_files_with_prefix(bucket_name: str, prefix: str) -> None:
 
 
 if __name__ == '__main__':
-    download_files_with_prefix('ziki-analytics-config', 'dynamodb_stream_event')
+    download_files_with_prefix('debug-dbd-stream-outputs', 'dynamodb_stream_event')

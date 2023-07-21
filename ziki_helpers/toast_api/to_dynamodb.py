@@ -11,13 +11,7 @@ from toast_auth import ToastToken
 import ziki_helpers.config.settings
 from ziki_helpers.aws.s3 import read_from_s3, write_to_s3
 from ziki_helpers.aws.dynamodb import get_entire_table
-
-TOAST_API_SERVER = os.environ.get('TOAST_API_SERVER')
-
-# Toast API endpoints
-orders_url = f'{TOAST_API_SERVER}/orders/v2/ordersBulk'
-labor_url = f'{TOAST_API_SERVER}/labor/v1/timeEntries'
-dining_option_url = f'{TOAST_API_SERVER}/config/v2/diningOptions'
+from connector import ToastConnector
 
 # Stores the last time orders were written to DynamoDB
 S3_BUCKET = 'ziki-dataflow'
@@ -28,10 +22,6 @@ S3_BUCKET = 'ziki-dataflow'
 # Next time orders are wrote, it'll start at end time - TIME_OVERLAP_BUFFER
 # Eventually this should be decreased to 0, but for now it's 3 hours until we're sure about writing capabilities
 TIME_OVERLAP_BUFFER = dt.timedelta(hours=3)
-
-# Settings for toast_auth
-os.environ['BUCKET_NAME'] = 'ziki-analytics-config'
-os.environ['FILE_NAME'] = 'toast_token.json'
 
 
 def get_date_range(start_date: dt.date, end_date: dt.date) -> list[str]:
@@ -92,11 +82,11 @@ def location_id_from_date(location_info: list[dict], date: int) -> str:
     raise ValueError(f'No location found for date {date}.\nLocation info:\n{location_info}')
 
 
-class ToastDataFlow:
+class ToastDataFlow(ToastConnector):
 
     def __init__(self):
+        super().__init__()
         self.locations = get_entire_table('locations')
-        self.toast_token = ToastToken('s3')
 
     def write_orders_by_business_date(self, business_date: int) -> None:
         print(f"Business Date: {date_int_to_dashed_string(business_date)}")
@@ -106,51 +96,20 @@ class ToastDataFlow:
             for location in self.locations:
                 if not location['info'][0]['address']:  # Ignore guid placeholders for future locations
                     continue
+                if len(location['info']) == 1:
+                    location_id = location['info'][0]['id']
+                else:
+                    location_id = location_id_from_date(location['info'], business_date)
+                data = self.get_orders_by_business_date(business_date, location['guid'])
+                for order in data:
+                    order['location'] = location_id
+                    item = json.loads(json.dumps(order), parse_float=Decimal)
+                    batch.put_item(
+                        Item=item
+                    )
 
-                location_guid = location['guid']
-                print("location: ", location['info'][-1]['id'])
-                page = 1
-
-                while True:
-                    print("Page: ", page)
-                    # Query the orders
-                    query = {
-                        "businessDate": business_date,
-                        "page": str(page),
-                        "pageSize": "100",
-                    }
-                    headers = {
-                        **self.toast_token,
-                        "Toast-Restaurant-External-ID": location_guid,
-                    }
-
-                    response = requests.get(orders_url, headers=headers, params=query).json()
-
-                    print('Query Size: ', len(response))
-                    if type(response) == dict:
-                        print("Error Response Occurred: ")
-                        print(response)
-                        raise ValueError
-
-                    if len(location['info']) == 1:
-                        location_id = location['info'][0]['id']
-                    else:
-                        location_id = location_id_from_date(location['info'], business_date)
-
-                    for order in response:
-                        order['location'] = location_id
-                        item = json.loads(json.dumps(order), parse_float=Decimal)
-                        batch.put_item(
-                            Item=item
-                        )
-
-                    if len(response) < 100:
-                        break
-                    else:
-                        page += 1
                 print("Done with location: ", location['info'][-1]['id'])
                 print()
-
         print('Done')
 
     def write_yesterday_orders(self):
@@ -184,22 +143,8 @@ class ToastDataFlow:
 
             location_guid = location['guid']
             print("location: ", location['info'][-1]['id'])
-            # Query the orders
-            query = {
-                "businessDate": business_date,
-            }
-            headers = {
-                **self.toast_token,
-                "Toast-Restaurant-External-ID": location_guid,
-            }
 
-            response = requests.get(labor_url, headers=headers, params=query).json()
-
-            print('Query Size: ', len(response))
-            if type(response) == dict:
-                print("Error Response Occurred: ")
-                print(response)
-                raise ValueError
+            data = self.get_labor_by_business_date(business_date, location_guid)
 
             if len(location['info']) == 1:
                 location_id = location['info'][0]['id']
@@ -207,7 +152,7 @@ class ToastDataFlow:
                 location_id = location_id_from_date(location['info'], business_date)
 
             with table.batch_writer() as batch:
-                for entry in response:
+                for entry in data:
                     entry['location'] = location_id
                     entry['businessDate'] = int(entry['businessDate'])
                     item = json.loads(json.dumps(entry), parse_float=Decimal)
@@ -219,8 +164,7 @@ class ToastDataFlow:
         print('Done')
 
     def write_orders_between_times(self, start: dt.datetime, end: dt.datetime) -> None:
-        start = start.isoformat(timespec='milliseconds')
-        end = end.isoformat(timespec='milliseconds')
+
         table = boto3.resource('dynamodb', region_name='us-east-1').Table('orders')
 
         for location in self.locations:
@@ -228,46 +172,20 @@ class ToastDataFlow:
                 continue
             location_guid = location['guid']
             print("location: ", location['info'][-1]['id'])
-            page = 1
 
-            while True:
+            data = self.get_orders_between_times(start, end, location_guid)
+            with table.batch_writer() as batch:
+                for order in data:
+                    if len(location['info']) == 1:
+                        location_id = location['info'][0]['id']
+                    else:
+                        location_id = location_id_from_date(location['info'], order['businessDate'])
+                    order['location'] = location_id
+                    item = json.loads(json.dumps(order), parse_float=Decimal)
+                    batch.put_item(
+                        Item=item
+                    )
 
-                print("Page: ", page)
-                # Query the orders
-                query = {
-                    "startDate": start,
-                    "endDate": end,
-                    "page": str(page),
-                    "pageSize": "100",
-                }
-                headers = {
-                    **self.toast_token,
-                    "Toast-Restaurant-External-ID": location_guid,
-                }
-
-                response = requests.get(orders_url, headers=headers, params=query).json()
-
-                print('Query Size: ', len(response))
-                if type(response) == dict:
-                    print("Error Response Occurred: ")
-                    print(response)
-                    raise ValueError
-                with table.batch_writer() as batch:
-                    for order in response:
-                        if len(location['info']) == 1:
-                            location_id = location['info'][0]['id']
-                        else:
-                            location_id = location_id_from_date(location['info'], order['businessDate'])
-                        order['location'] = location_id
-                        item = json.loads(json.dumps(order), parse_float=Decimal)
-                        batch.put_item(
-                            Item=item
-                        )
-
-                if len(response) < 100:
-                    break
-                else:
-                    page += 1
             print("Done with location: ", location['info'][-1]['id'])
             print()
 
@@ -290,44 +208,24 @@ class ToastDataFlow:
         for location in self.locations:
             if not location['info'][0]['address']:
                 continue
-            time_window_start = start
-            time_window_end = time_window_start
+
             location_guid = location['guid']
             print("location: ", location['info'][-1]['id'])
 
-            while time_window_end < end:
-                time_window_end = time_window_start + dt.timedelta(days=30)
-                # Query time entries
-                query = {
-                    "modifiedStartDate": time_window_start.isoformat(timespec='milliseconds'),
-                    "modifiedEndDate": time_window_end.isoformat(timespec='milliseconds'),
-                }
-                headers = {
-                    **self.toast_token,
-                    "Toast-Restaurant-External-ID": location_guid,
-                }
+            data = self.get_labor_between_times(start, end, location_guid)
 
-                response = requests.get(labor_url, headers=headers, params=query).json()
-
-                print('Query Size: ', len(response))
-                if type(response) == dict:
-                    print("Error Response Occurred: ")
-                    print(response)
-                    raise ValueError
-                if response:
-                    with table.batch_writer() as batch:
-                        for entry in response:
-                            if len(location['info']) == 1:
-                                location_id = location['info'][0]['id']
-                            else:
-                                location_id = location_id_from_date(location['info'], entry['businessDate'])
-                            entry['location'] = location_id
-                            entry['businessDate'] = int(entry['businessDate'])
-                            item = json.loads(json.dumps(entry), parse_float=Decimal)
-                            batch.put_item(
-                                Item=item
-                            )
-                time_window_start += dt.timedelta(days=30)
+            with table.batch_writer() as batch:
+                for entry in data:
+                    if len(location['info']) == 1:
+                        location_id = location['info'][0]['id']
+                    else:
+                        location_id = location_id_from_date(location['info'], entry['businessDate'])
+                    entry['location'] = location_id
+                    entry['businessDate'] = int(entry['businessDate'])
+                    item = json.loads(json.dumps(entry), parse_float=Decimal)
+                    batch.put_item(
+                        Item=item
+                    )
 
             print("Done with location: ", location['info'][-1]['id'])
             print()
@@ -346,48 +244,29 @@ class ToastDataFlow:
         write_to_s3(S3_BUCKET, 'last_updated_time_labor.txt', end.isoformat(timespec='milliseconds'))
 
     def update_mappings(self):
-        # start = (dt.datetime.fromisoformat(read_from_s3(S3_BUCKET, 'last_updated_time_mappings.txt')) - \
-        #          dt.timedelta(days=3)).isoformat(timespec='milliseconds')
-        start = "2021-01-01T00:00:00.000+0000"
-        for mapping_name in ['dining_options', 'alternate_payments', 'employees']:
-            print("Mapping: ", mapping_name)
-            table = boto3.resource('dynamodb', region_name='us-east-1').Table(mapping_name)
-            match mapping_name:
-                case "dining_options": url = f"{TOAST_API_SERVER}/config/v2/diningOptions"
-                case "alternate_payments": url = f"{TOAST_API_SERVER}/config/v2/alternatePaymentTypes"
-                case "employees": url = f"{TOAST_API_SERVER}/labor/v1/employees"
-                case _: raise ValueError("Invalid mapping name")
+        start = (dt.datetime.fromisoformat(read_from_s3(S3_BUCKET, 'last_updated_time_mappings.txt')) - \
+                 dt.timedelta(days=3)).isoformat(timespec='milliseconds')
+        # start = "2021-01-01T00:00:00.000+0000"
 
-            query = {
-                "lastModified": start,
-            }
-
+        for mapping, _type in [('dining_options', 'config'), ('alternate_payments', 'config'), ('employees', 'labor'), ('jobs', 'labor')]:
+            table = boto3.resource('dynamodb', region_name='us-east-1').Table(mapping)
             data = []
             for location in self.locations:
                 if not location['info'][0]['address']:
                     continue
-                location_guid = location['guid']
-                headers = {
-                    "Toast-Restaurant-External-ID": location_guid,
-                    **self.toast_token
-                }
-
-                response = requests.get(url, headers=headers, params=query)
-                assert response.status_code == 200, 'Request Failed'
-                data.extend(response.json())
+                if _type == 'config':
+                    response = self.get_config_mappings(mapping, location['guid'], start)
+                elif _type == 'labor':
+                    response = self.get_labor_mappings(mapping, location['guid'])
+                data += response
 
             data = remove_duplicates(data)
-
-            print("Total number of items: ", len(data))
-            # Write to dynamoDB
             with table.batch_writer() as batch:
                 for item in data:
                     if item['guid'] is not None:
                         batch.put_item(
                             Item=json.loads(json.dumps(item), parse_float=Decimal)
                         )
-
-            print("Done with mapping: ", mapping_name)
         write_to_s3(
             S3_BUCKET,
             'last_updated_time_mappings.txt',
@@ -397,6 +276,4 @@ class ToastDataFlow:
 
 if __name__ == '__main__':
     flow = ToastDataFlow()
-    start = dt.datetime.now() - dt.timedelta(days=10)
-    end = dt.datetime.now()
-    flow.write_labor_by_date_range(start, end)
+    flow.update_mappings()

@@ -28,6 +28,12 @@ def time_entries_and_start_dates_from_labor_data(data: list[dict], start_dates: 
          'regularHours', 'overtimeHours', 'guid']
     ]
 
+    # Decimal Columns
+    decimal_cols = ['hourlyWage', 'regularHours', 'overtimeHours']
+    for col in decimal_cols:
+        labor[col] = labor[col].fillna(0)
+        labor[col] = labor[col].apply(lambda x: decimal.Decimal(x).quantize(decimal.Decimal('0.00')))
+
     # Unpack employee and job guids from reference objects
     labor['employeeGuid'] = labor['employeeReference'].apply(pd.Series)['guid']
     job_reference = labor['jobReference'].apply(pd.Series)
@@ -35,13 +41,16 @@ def time_entries_and_start_dates_from_labor_data(data: list[dict], start_dates: 
         labor['jobGuid'] = job_reference['guid']
     else:
         labor['jobGuid'] = None
+    # Fill nulls
+    labor['jobGuid'] = labor['jobGuid'].fillna('')
     labor = labor.drop(columns=['employeeReference', 'jobReference'])
 
     # Get employee info
     employees = get_entire_table('employees')
     employees = pd.DataFrame(employees)
     employees = employees[
-        ['guid', 'v2EmployeeGuid', 'chosenName', 'firstName', 'lastName', 'wageOverrides', 'jobReferences']]
+        ['guid', 'v2EmployeeGuid', 'chosenName', 'firstName', 'lastName', 'wageOverrides', 'jobReferences']
+    ]
 
     # Merge employee info
     labor = labor.merge(
@@ -52,10 +61,20 @@ def time_entries_and_start_dates_from_labor_data(data: list[dict], start_dates: 
         suffixes=('TimeEntry', 'Employee')
     )
     labor = labor.drop(columns=['guidEmployee'])
+    labor['chosenName'] = labor['chosenName'].fillna('')
+    # Strip whitespace
+    labor['chosenName'] = labor['chosenName'].str.strip()
+    labor['firstName'] = labor['firstName'].str.strip()
+    labor['lastName'] = labor['lastName'].str.strip()
+
 
     # Calculate pay
-    labor['regularPay'] = labor['regularHours'].astype(float) * labor['hourlyWage'].astype(float)
-    labor['overtimePay'] = labor['overtimeHours'].astype(float) * labor['hourlyWage'].astype(float) * 1.5
+    labor['regularPay'] = (
+            labor['regularHours'] * labor['hourlyWage']
+    ).apply(lambda x: decimal.Decimal(x).quantize(decimal.Decimal('0.00')))
+    labor['overtimePay'] = (
+            labor['overtimeHours'] * labor['hourlyWage'] * decimal.Decimal(1.5)
+    ).apply(lambda x: decimal.Decimal(x).quantize(decimal.Decimal('0.00')))
 
     # Business date integer to datetime
     labor['businessDate'] = pd.to_datetime(labor['businessDate'], format='%Y%m%d')
@@ -91,16 +110,14 @@ def time_entries_and_start_dates_from_labor_data(data: list[dict], start_dates: 
     # Denote training entries
     labor['isTraining'] = labor['businessDate'] < (labor['startDate'] + dt.timedelta(days=14))
     labor = labor.drop(columns=['startDate'])
-    labor['isTraining'] = labor['isTraining'].astype(int)
 
     # Convert businessDate to str of YYYY-MM-DD format
     labor['businessDate'] = labor['businessDate'].dt.strftime('%Y-%m-%d')
 
-    # Handle Decimals
-    labor['regularHours'] = labor['regularHours'].apply(lambda x: decimal.Decimal(x).quantize(decimal.Decimal('0.00')))
-    labor['overtimeHours'] = labor['overtimeHours'].apply(lambda x: decimal.Decimal(x).quantize(decimal.Decimal('0.00')))
-
-    labor['regularPay'] = labor['regularPay'].apply(lambda x: decimal.Decimal(x).quantize(decimal.Decimal('0.00')))
-    labor['overtimePay'] = labor['overtimePay'].apply(lambda x: decimal.Decimal(x).quantize(decimal.Decimal('0.00')))
-
     return labor, start_dates
+
+
+if __name__ == '__main__':
+    from ziki_helpers.aws.dynamodb import query_on_business_date
+    data = query_on_business_date('labor', 20230709)
+    labor, start_dates = time_entries_and_start_dates_from_labor_data(data)
