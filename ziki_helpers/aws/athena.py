@@ -110,9 +110,11 @@ def query_athena_get_results_as_df(
 
     # Create a Pandas DataFrame with the query results
     df = pd.DataFrame(query_results, columns=columns)
+    print(df)
 
     # Convert column data types
     for col, dtype in zip(columns, dtypes):
+        print(col, dtype)
         if dtype.startswith('varchar'):
             df[col] = df[col].astype(str)
         elif dtype == 'integer':
@@ -124,7 +126,7 @@ def query_athena_get_results_as_df(
         elif dtype == 'double':
             df[col] = df[col].astype(float)
         elif dtype == 'decimal':
-           df[col] = df[col].apply(lambda x: Decimal(x))
+            df[col] = df[col].apply(lambda x: Decimal(x))
         # Add more data type mappings as needed
 
     return df
