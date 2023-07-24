@@ -7,6 +7,7 @@ from decimal import Decimal
 from typing import Any, Union
 import re
 
+import pandas as pd
 import boto3
 from toast_auth import ToastToken
 
@@ -45,6 +46,12 @@ labor_url = f'{TOAST_API_SERVER}/labor/v1/timeEntries'
 config_url = f"{TOAST_API_SERVER}/config/v2"
 dining_option_url = f'{TOAST_API_SERVER}/config/v2/diningOptions'
 labor_base_url = f"{TOAST_API_SERVER}/labor/v1"
+alternate_payments_url = f"{TOAST_API_SERVER}/config/v2/alternatePaymentTypes"
+menu_url = f"{TOAST_API_SERVER}/menus/v2/menus"
+menu_items_url = f"{TOAST_API_SERVER}/config/v2/menuItems"
+inventory_url = f"{TOAST_API_SERVER}/stock/v1/inventory"
+last_updated_url = f"{TOAST_API_SERVER}/menus/v2/metadata"
+
 
 # Stores the last time orders were written to DynamoDB
 S3_BUCKET = 'ziki-dataflow'
@@ -66,6 +73,7 @@ class ToastConnector:
     def __init__(self):
         self.toast_token = ToastToken('s3')
         self.location_guid = None
+        self.menu_cache = dict()
 
     def get_orders_by_business_date(self, business_date: int, location_guid: Union[str, None] = None) -> list[dict[str, Any]]:
         data = []
@@ -154,33 +162,34 @@ class ToastConnector:
 
         return data
 
-    def get_dining_options(self, location_guid: Union[str, None] = None, start_time: Union[str, dt.datetime, None] = None) -> list[dict[str, Any]]:
+    # def get_dining_options(self, location_guid: Union[str, None] = None, start_time: Union[str, dt.datetime, None] = None) -> list[dict[str, Any]]:
+    #
+    #     # # Preprocess start time
+    #     # if start_time is None:
+    #     #     start_time = "2021-01-01T00:00:00.000+0000"
+    #     # else:
+    #     #     if type(start_time) == dt.datetime:
+    #     #         start_time = start_time.isoformat(timespec='milliseconds')
+    #     #     elif type(start_time) == str:
+    #     #         assert is_iso_datetime(start_time), f"Start time is not a valid ISO datetime string.\n{start_time}"
+    #     #     else:
+    #     #         raise TypeError(f"Start time must be a datetime object or ISO datetime string.\n{start_time}")
+    #     # query = {
+    #     #     "lastModified": start_time,
+    #     # }
+    #     response = requests.get(dining_option_url, headers=self.headers(location_guid), params=query)
+    #     assert response.status_code == 200, f"API call failed. Response.\n{response}"
+    #     data = response.json()
+    #
+    #     return data
 
-        # # Preprocess start time
-        # if start_time is None:
-        #     start_time = "2021-01-01T00:00:00.000+0000"
-        # else:
-        #     if type(start_time) == dt.datetime:
-        #         start_time = start_time.isoformat(timespec='milliseconds')
-        #     elif type(start_time) == str:
-        #         assert is_iso_datetime(start_time), f"Start time is not a valid ISO datetime string.\n{start_time}"
-        #     else:
-        #         raise TypeError(f"Start time must be a datetime object or ISO datetime string.\n{start_time}")
-        # query = {
-        #     "lastModified": start_time,
-        # }
-        response = requests.get(dining_option_url, headers=self.headers(location_guid), params=query)
-        assert response.status_code == 200, f"API call failed. Response.\n{response}"
-        data = response.json()
-
-        return data
-
-    def get_alternative_payments(self, location_guid: Union[str, None] = None, start_time: Union[str, dt.datetime, None] = None) -> list[dict[str, Any]]:
-        response = requests.get(alternative_payments_url, headers=self.headers(location_guid))
-        assert response.status_code == 200, f"API call failed. Response.\n{response}"
-        data = response.json()
-
-        return data
+    # def get_alternative_payments(self, location_guid: Union[str, None] = None, start_time: Union[str, dt.datetime, None] = None) -> list[dict[str, Any]]:
+    #
+    #     response = requests.get(alternate_payments_url, headers=self.headers(location_guid))
+    #     assert response.status_code == 200, f"API call failed. Response.\n{response}"
+    #     data = response.json()
+    #
+    #     return data
 
     def get_config_mappings(self, config: str, location_guid: Union[str, None] = None, start_time: Union[str, dt.datetime, None] = None) -> list[dict[str, Any]]:
         # Preprocess start time
@@ -228,10 +237,93 @@ class ToastConnector:
         data = response.json()
         return data
 
+    def get_item_name_from_guid(self, item_guid: str, location_guid: Union[str, None] = None) -> str:
+        # Get the menu item name from the item guid
+        url = menu_items_url + '/' + item_guid
+        response = requests.get(url, headers=self.headers(location_guid))
+        assert response.status_code == 200, f"API call failed. Response.\n{response}"
+        data = response.json()
+        return data['name']
+
+    def get_out_of_stock_guids(self, location_guid: Union[str, None] = None) -> list[str]:
+        query = {"status": "OUT_OF_STOCK"}
+
+        # Get the out of stock item guids
+        response = requests.get(inventory_url, headers=self.headers(location_guid), parames=query)
+        assert response.status_code == 200, f"API call failed. Response.\n{response}"
+        data = response.json()
+        return list(set([item['guid'] for item in data]))
+
+    def get_menu(self, location_guid: Union[str, None] = None) -> list[dict[str, Any]]:
+        # Adjust location guid
+        if location_guid is not None:
+            self.location_guid = location_guid
+
+        # Get menu from cache if it exists
+        if self.location_guid in self.menu_cache:
+            return self.menu_cache[location_guid]
+
+        # Query menu API
+        response = requests.get(menu_url, headers=self.headers(location_guid))
+        assert response.status_code == 200, f"API call failed. Response.\n{response}"
+        menu = response.json()
+
+        # Add to menu cache
+        self.menu_cache[location_guid] = menu
+
+        return menu
+
+    def item_guid_is_modifier(self, item_guid: str, location_guid: Union[str, None] = None) -> bool:
+        if location_guid is not None:
+            self.location_guid = location_guid
+
+        # Get menu as DataFrame
+        menu_df = pd.DataFrame([self.get_menu()])
+
+        # Check if item guid is in modifier options
+        mod_options = menu_df['modifierOptionReferences'].apply(pd.Series).stack().apply(pd.Series)
+        mod_option_guids = mod_options['guid']
+        return item_guid in mod_option_guids.values
+
+    def get_modifier_info(self, item_guid: str, location_guid: Union[str, None] = None) -> dict:
+        """
+        Returns the modifier information for a given modifier GUID.
+        :return:
+        """
+        if location_guid is not None:
+            self.location_guid = location_guid
+
+        menu_df = pd.DataFrame([self.get_menu()])
+
+        mod_options = menu_df['modifierOptionReferences'].apply(pd.Series).stack().apply(pd.Series)
+        mod_groups = menu_df['modifierGroupReferences'].apply(pd.Series).stack().apply(pd.Series)
+
+        # Get modifier info
+        mod_info = mod_options.loc[mod_options['guid'] == item_guid]
+        mod_id = mod_info['referenceId'].values[0]
+        mod_name = mod_info['name'].values[0]
+
+        # Get modifier group info
+        mod_group = mod_groups.loc[mod_groups['modifierOptionReferences'].apply(lambda x: mod_id in x)]
+        mod_group_name = mod_group['name'].values[0]
+        mod_group_id = mod_group['referenceId'].values[0]
+
+        # Get menu items w/ modifier group
+        menus = menu_df['menus'].apply(pd.Series).stack().apply(pd.Series)
+        menu_groups = menus['menuGroups'].apply(pd.Series).stack().apply(pd.Series)
+        menu_items = menu_groups['menuItems'].apply(pd.Series).stack().apply(pd.Series)
+        out_of_order_items = menu_items.loc[menu_items['modifierGroupReferences'].apply(lambda x: mod_group_id in x)]
+        menu_items = out_of_order_items['name'].tolist()
+
+        return {'modifier_name': mod_name, 'modifier_group_name': mod_group_name, 'menu_items': menu_items}
+
     def headers(self, location_guid: Union[str, None] = None) -> dict[str, str]:
+        # Adjust location guid if specified
         if location_guid is not None:
             self.location_guid = location_guid
         assert self.location_guid is not None, "Location GUID must be set before headers can be retrieved."
+
+        # Return structured headers
         return {
             **self.toast_token,
             "Toast-Restaurant-External-ID": location_guid,
