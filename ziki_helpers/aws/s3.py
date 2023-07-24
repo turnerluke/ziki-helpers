@@ -71,14 +71,16 @@ def save_df_as_csv(df, bucket_name, file_key):
     assert response['ResponseMetadata']['HTTPStatusCode'] == 200, "File was not successfully saved to S3"
 
 
-def save_df_as_parquet(df, bucket_name, file_key):
-    # Convert dataframe to CSV string
-    csv_buffer = io.StringIO()
-    df.to_parquet(csv_buffer, index=False)
+def save_df_as_parquet(df: pd.DataFrame, bucket_name: str, file_key: str, compression: str = 'snappy') -> None:
+    # Convert dataframe to io string
+    buffer = io.StringIO()
+
+    # Save df to the buffer
+    df.to_parquet(buffer, compression=compression, index=False)
 
     # Save the CSV string to S3 bucket
     response = s3.put_object(
-        Body=csv_buffer.getvalue(),
+        Body=buffer.getvalue(),
         Bucket=bucket_name,
         Key=file_key
     )
@@ -132,9 +134,7 @@ def dataframe_to_s3_with_date_partition(df: pd.DataFrame, bucket_name: str, tabl
 
     # Save to S3, with year, month, day partitions
     filepath = f'{tablename}/year={yr}/month={mo}/day={day}/{filename}.parquet.gzip'
-    out_buffer = io.BytesIO()
-    df.to_parquet(out_buffer, compression='gzip', index=False)
-    s3.put_object(Bucket=bucket_name, Key=filepath, Body=out_buffer.getvalue())
+    save_df_as_parquet(df, bucket_name, filepath, compression='gzip')
 
 
 def download_files_with_prefix(bucket_name: str, prefix: str) -> None:
