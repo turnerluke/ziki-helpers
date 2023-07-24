@@ -249,7 +249,7 @@ class ToastConnector:
         query = {"status": "OUT_OF_STOCK"}
 
         # Get the out of stock item guids
-        response = requests.get(inventory_url, headers=self.headers(location_guid), parames=query)
+        response = requests.get(inventory_url, headers=self.headers(location_guid), params=query)
         assert response.status_code == 200, f"API call failed. Response.\n{response}"
         data = response.json()
         return list(set([item['guid'] for item in data]))
