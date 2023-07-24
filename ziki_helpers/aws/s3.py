@@ -73,7 +73,7 @@ def save_df_as_csv(df, bucket_name, file_key):
 
 def save_df_as_parquet(df: pd.DataFrame, bucket_name: str, file_key: str, compression: str = 'snappy') -> None:
     # Convert dataframe to io string
-    buffer = io.StringIO()
+    buffer = io.BytesIO()
 
     # Save df to the buffer
     df.to_parquet(buffer, compression=compression, index=False)
