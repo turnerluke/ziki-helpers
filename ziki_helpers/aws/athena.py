@@ -113,7 +113,6 @@ def query_athena_get_results_as_df(
 
     # Convert column data types
     for col, dtype in zip(columns, dtypes):
-        print(col, dtype)
         if dtype.startswith('varchar'):
             df[col] = df[col].astype(str)
         elif dtype == 'integer':
