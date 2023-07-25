@@ -6,6 +6,7 @@ import requests
 from decimal import Decimal
 from typing import Any, Union
 import re
+import time
 
 import pandas as pd
 import boto3
@@ -262,6 +263,9 @@ class ToastConnector:
         # Get menu from cache if it exists
         if self.location_guid in self.menu_cache:
             return self.menu_cache[location_guid]
+
+        # Rest 5 seconds to avoid rate limiting
+        time.sleep(5)
 
         # Query menu API
         response = requests.get(menu_url, headers=self.headers(location_guid))
