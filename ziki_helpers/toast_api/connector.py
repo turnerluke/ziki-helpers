@@ -326,7 +326,7 @@ class ToastConnector:
         # Return structured headers
         return {
             **self.toast_token,
-            "Toast-Restaurant-External-ID": location_guid,
+            "Toast-Restaurant-External-ID": self.location_guid,
         }
 
 
