@@ -110,7 +110,6 @@ def query_athena_get_results_as_df(
 
     # Create a Pandas DataFrame with the query results
     df = pd.DataFrame(query_results, columns=columns)
-    print(df)
 
     # Convert column data types
     for col, dtype in zip(columns, dtypes):
