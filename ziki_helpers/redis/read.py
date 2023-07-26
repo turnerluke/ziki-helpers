@@ -13,8 +13,14 @@ def dataframe_from_redis(r: redis.Redis, key: str) -> pd.DataFrame:
         table = pq.read_table(buffer)
         df = table.to_pandas()
         return df
+
     except:
         return None
+
+
+def get_keys_by_prefix(r: redis.Redis, prefix: str) -> list[str]:
+    keys = r.keys(f'{prefix}*')
+    return keys
 
 
 if __name__ == '__main__':
