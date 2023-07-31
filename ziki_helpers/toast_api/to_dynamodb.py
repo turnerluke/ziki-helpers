@@ -1,6 +1,6 @@
 import os
 import datetime as dt
-import pytz
+from zoneinfo import ZoneInfo
 import json
 import requests
 from decimal import Decimal
@@ -21,7 +21,12 @@ S3_BUCKET = 'ziki-dataflow'
 # IE orders are wrote to Noon -> End time is (12:00)
 # Next time orders are wrote, it'll start at end time - TIME_OVERLAP_BUFFER
 # Eventually this should be decreased to 0, but for now it's 3 hours until we're sure about writing capabilities
-TIME_OVERLAP_BUFFER = dt.timedelta(hours=3)
+TIME_OVERLAP_BUFFER = dt.timedelta(hours=4)
+us_central_timezone = ZoneInfo("America/Chicago")
+
+
+def get_current_time_given_timezone(timezone: ZoneInfo = us_central_timezone) -> dt.datetime:
+    return dt.datetime.now(timezone)
 
 
 def get_date_range(start_date: dt.date, end_date: dt.date) -> list[str]:
@@ -194,7 +199,7 @@ class ToastDataFlow(ToastConnector):
     def write_orders_to_now(self):
         # Get the last updated time from S3
         start = dt.datetime.fromisoformat(read_from_s3(S3_BUCKET, 'last_updated_time_orders.txt')) - TIME_OVERLAP_BUFFER
-        end = pytz.timezone('US/Central').localize(dt.datetime.now())
+        end = get_current_time_given_timezone()
 
         # Write the orders between the last updated time and now
         self.write_orders_between_times(start, end)
@@ -235,7 +240,7 @@ class ToastDataFlow(ToastConnector):
     def write_labor_to_now(self):
         # Get the last updated time from S3
         start = dt.datetime.fromisoformat(read_from_s3(S3_BUCKET, 'last_updated_time_labor.txt')) - TIME_OVERLAP_BUFFER
-        end = pytz.timezone('US/Central').localize(dt.datetime.now())
+        end = get_current_time_given_timezone()
 
         # Write the labor between the last updated time and now
         self.write_labor_between_times(start, end)
@@ -267,13 +272,16 @@ class ToastDataFlow(ToastConnector):
                         batch.put_item(
                             Item=json.loads(json.dumps(item), parse_float=Decimal)
                         )
+        now = get_current_time_given_timezone()
         write_to_s3(
             S3_BUCKET,
             'last_updated_time_mappings.txt',
-            pytz.timezone('US/Central').localize(dt.datetime.now()).isoformat(timespec='milliseconds')
+            now.isoformat(timespec='milliseconds')
         )
 
 
 if __name__ == '__main__':
     flow = ToastDataFlow()
-    flow.update_mappings()
+    flow.write_orders_to_now()
+    # end = dt.datetime.now(us_central_timezone)
+    # write_to_s3(S3_BUCKET, 'last_updated_time_orders.txt', end.isoformat(timespec='milliseconds'))
