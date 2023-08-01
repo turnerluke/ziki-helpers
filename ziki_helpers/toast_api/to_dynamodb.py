@@ -11,7 +11,7 @@ from toast_auth import ToastToken
 import ziki_helpers.config.settings
 from ziki_helpers.aws.s3 import read_from_s3, write_to_s3
 from ziki_helpers.aws.dynamodb import get_entire_table
-from connector import ToastConnector
+from ziki_helpers.toast_api.connector import ToastConnector
 
 # Stores the last time orders were written to DynamoDB
 S3_BUCKET = 'ziki-dataflow'
@@ -282,6 +282,9 @@ class ToastDataFlow(ToastConnector):
 
 if __name__ == '__main__':
     flow = ToastDataFlow()
-    flow.write_orders_to_now()
+    flow.write_orders_by_date_range(
+        dt.date(2023, 7, 24),
+        dt.date(2023, 7, 30)
+    )
     # end = dt.datetime.now(us_central_timezone)
     # write_to_s3(S3_BUCKET, 'last_updated_time_orders.txt', end.isoformat(timespec='milliseconds'))
