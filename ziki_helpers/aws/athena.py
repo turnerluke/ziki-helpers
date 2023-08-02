@@ -115,13 +115,11 @@ def query_athena_get_results_as_df(
     for col, dtype in zip(columns, dtypes):
         if dtype.startswith('varchar'):
             df[col] = df[col].astype(str)
-        elif dtype == 'integer':
+        elif dtype in ['integer', 'tinyint', 'smallint', 'bigint', 'int']:
             df[col] = df[col].astype(int)
         elif dtype == 'boolean':
             df[col].apply(lambda x: x.strip().upper() == 'TRUE')
-        elif dtype == 'float':
-            df[col] = df[col].astype(float)
-        elif dtype == 'double':
+        elif dtype in ['float', 'double']:
             df[col] = df[col].astype(float)
         elif dtype == 'decimal':
             df[col] = df[col].apply(lambda x: Decimal(x))
