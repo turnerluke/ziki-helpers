@@ -4,6 +4,7 @@ from zoneinfo import ZoneInfo
 import json
 import requests
 from decimal import Decimal
+import calendar
 
 import boto3
 from toast_auth import ToastToken
@@ -87,6 +88,20 @@ def location_id_from_date(location_info: list[dict], date: int) -> str:
     raise ValueError(f'No location found for date {date}.\nLocation info:\n{location_info}')
 
 
+def get_start_and_end_of_last_month() -> tuple[dt.date, dt.date]:
+    last_month = dt.date.today().replace(day=1) - dt.timedelta(days=1)
+    start, end = get_month_start_and_end(last_month.year, last_month.month)
+    return start, end
+
+
+def get_month_start_and_end(year: int, month: int) -> tuple[dt.date, dt.date]:
+    start = dt.date(year, month, 1)
+    end = start.replace(
+        day=calendar.monthrange(year, month)[1]
+    )
+    return start, end
+
+
 class ToastDataFlow(ToastConnector):
 
     def __init__(self):
@@ -122,6 +137,10 @@ class ToastDataFlow(ToastConnector):
         business_date = int(yesterday.strftime('%Y%m%d'))
         self.write_orders_by_business_date(business_date)
 
+    def write_last_month_orders(self) -> None:
+        start_date, end_date = get_start_and_end_of_last_month()
+        self.write_orders_by_date_range(start_date, end_date)
+
     def write_orders_by_date_range(self, start: dt.date, end: dt.date) -> None:
         dates = get_date_range(start, end)
         for date in dates:
@@ -132,6 +151,10 @@ class ToastDataFlow(ToastConnector):
         business_date = int(yesterday.strftime('%Y%m%d'))
 
         self.write_labor_by_business_date(business_date)
+
+    def write_last_month_labor(self) -> None:
+        start_date, end_date = get_start_and_end_of_last_month()
+        self.write_labor_by_date_range(start_date, end_date)
 
     def write_labor_by_date_range(self, start: dt.date, end: dt.date) -> None:
         dates = get_date_range(start, end)
@@ -147,7 +170,6 @@ class ToastDataFlow(ToastConnector):
                 continue
 
             location_guid = location['guid']
-            print("location: ", location['info'][-1]['id'])
 
             data = self.get_labor_by_business_date(business_date, location_guid)
 
@@ -164,9 +186,6 @@ class ToastDataFlow(ToastConnector):
                     batch.put_item(
                         Item=item
                     )
-            print("Done with location: ", location['info'][-1]['id'])
-
-        print('Done')
 
     def write_orders_between_times(self, start: dt.datetime, end: dt.datetime) -> None:
 
@@ -282,9 +301,6 @@ class ToastDataFlow(ToastConnector):
 
 if __name__ == '__main__':
     flow = ToastDataFlow()
-    flow.write_orders_by_date_range(
-        dt.date(2023, 7, 24),
-        dt.date(2023, 7, 30)
-    )
+    flow.write_last_month_orders()
     # end = dt.datetime.now(us_central_timezone)
     # write_to_s3(S3_BUCKET, 'last_updated_time_orders.txt', end.isoformat(timespec='milliseconds'))
