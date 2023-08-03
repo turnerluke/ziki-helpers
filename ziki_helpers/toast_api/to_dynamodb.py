@@ -102,6 +102,16 @@ def get_month_start_and_end(year: int, month: int) -> tuple[dt.date, dt.date]:
     return start, end
 
 
+def get_start_and_end_of_last_week() -> tuple[dt.date, dt.date]:
+    """Get the Monday and Sunday of last week."""
+    # Get last sunday
+    sun = dt.date.today() - dt.timedelta(days=dt.date.today().weekday() + 1)
+    # Get last monday
+    mon = sun - dt.timedelta(days=6)
+
+    return mon, sun
+
+
 class ToastDataFlow(ToastConnector):
 
     def __init__(self):
@@ -141,6 +151,10 @@ class ToastDataFlow(ToastConnector):
         start_date, end_date = get_start_and_end_of_last_month()
         self.write_orders_by_date_range(start_date, end_date)
 
+    def write_last_week_orders(self) -> None:
+        start_date, end_date = get_start_and_end_of_last_week()
+        self.write_orders_by_date_range(start_date, end_date)
+
     def write_orders_by_date_range(self, start: dt.date, end: dt.date) -> None:
         dates = get_date_range(start, end)
         for date in dates:
@@ -154,6 +168,10 @@ class ToastDataFlow(ToastConnector):
 
     def write_last_month_labor(self) -> None:
         start_date, end_date = get_start_and_end_of_last_month()
+        self.write_labor_by_date_range(start_date, end_date)
+
+    def write_last_week_labor(self) -> None:
+        start_date, end_date = get_start_and_end_of_last_week()
         self.write_labor_by_date_range(start_date, end_date)
 
     def write_labor_by_date_range(self, start: dt.date, end: dt.date) -> None:
