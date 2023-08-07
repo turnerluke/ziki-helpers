@@ -124,8 +124,8 @@ class ToastDataFlow(ToastConnector):
                 **location,
                 'info': [
                     {
+                        **loc,
                         'id': int(loc['id']),
-                        **loc
                     } for loc in location['info']
                 ]
             } for location in self.locations
@@ -329,12 +329,12 @@ class ToastDataFlow(ToastConnector):
 
 if __name__ == '__main__':
     flow = ToastDataFlow()
-    flow.write_yesterday_orders()
-
+    # flow.write_yesterday_orders()
+    flow.write_orders_to_now()
 
     # start = dt.date(2023, 7 , 30)
     # end = dt.date(2023, 8, 3)
     # flow.write_orders_by_date_range(start, end)
-    flow.write_last_week_orders()
+    # flow.write_last_week_orders()
     # end = dt.datetime.now(us_central_timezone)
     # write_to_s3(S3_BUCKET, 'last_updated_time_orders.txt', end.isoformat(timespec='milliseconds'))
