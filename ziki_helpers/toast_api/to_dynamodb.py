@@ -118,6 +118,19 @@ class ToastDataFlow(ToastConnector):
         super().__init__()
         self.locations = get_entire_table('locations')
 
+        # Change location ids to integers
+        self.locations = [
+            {
+                **location,
+                'info': [
+                    {
+                        'id': int(loc['id']),
+                        **loc
+                    } for loc in location['info']
+                ]
+            } for location in self.locations
+        ]
+
     def write_orders_by_business_date(self, business_date: int) -> None:
         print(f"Business Date: {date_int_to_dashed_string(business_date)}")
 
@@ -137,9 +150,6 @@ class ToastDataFlow(ToastConnector):
                     batch.put_item(
                         Item=item
                     )
-
-                print("Done with location: ", location['info'][-1]['id'])
-                print()
         print('Done')
 
     def write_yesterday_orders(self):
@@ -160,7 +170,7 @@ class ToastDataFlow(ToastConnector):
         for date in dates:
             self.write_orders_by_business_date(date)
 
-    def write_yesterday_labor(self):
+    def write_yesterday_labor(self) -> None:
         yesterday = dt.date.today() - dt.timedelta(days=1)
         business_date = int(yesterday.strftime('%Y%m%d'))
 
@@ -179,7 +189,7 @@ class ToastDataFlow(ToastConnector):
         for date in dates:
             self.write_labor_by_business_date(date)
 
-    def write_labor_by_business_date(self, business_date: int):
+    def write_labor_by_business_date(self, business_date: int) -> None:
         print(f"Business Date: {date_int_to_dashed_string(business_date)}")
         table = boto3.resource('dynamodb', region_name='us-east-1').Table('labor')
 
@@ -319,6 +329,12 @@ class ToastDataFlow(ToastConnector):
 
 if __name__ == '__main__':
     flow = ToastDataFlow()
-    flow.write_last_month_orders()
+    flow.write_yesterday_orders()
+
+
+    # start = dt.date(2023, 7 , 30)
+    # end = dt.date(2023, 8, 3)
+    # flow.write_orders_by_date_range(start, end)
+    flow.write_last_week_orders()
     # end = dt.datetime.now(us_central_timezone)
     # write_to_s3(S3_BUCKET, 'last_updated_time_orders.txt', end.isoformat(timespec='milliseconds'))
