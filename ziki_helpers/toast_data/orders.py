@@ -40,6 +40,9 @@ def process_orders(orders: pd.DataFrame) -> Union[pd.DataFrame, None]:
         ['location', 'businessDate', 'estimatedFulfillmentDate', 'guid', 'diningOption', 'checks', 'voided', 'deleted']
     ]
 
+    # Location to integer, comes through DBD as a decimal
+    orders['location'] = orders['location'].astype(int)
+
     # Remove voided and deleted orders
     orders = orders.loc[
         ~orders['voided'] & ~orders['deleted']
@@ -269,7 +272,8 @@ def sales_and_payments_from_raw_order_data(data: list[dict]) -> tuple[pd.DataFra
     selections = checks['selections'].apply(pd.Series)
 
     # Remove voided selections
-    orders, payments, selections = remove_voided_selections(selections, orders, payments)
+    if not selections.empty:
+        orders, payments, selections = remove_voided_selections(selections, orders, payments)
 
     selections = selections.stack().apply(pd.Series)
 
