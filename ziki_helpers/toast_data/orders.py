@@ -212,6 +212,10 @@ def sales_and_payments_from_raw_order_data(data: list[dict]) -> tuple[pd.DataFra
     # Keep only orders with exactly one valid check
     orders, checks = keep_one_valid_check_orders(orders, checks)
 
+    # End if empty
+    if orders.empty and checks.empty:
+        return pd.DataFrame(), pd.DataFrame()
+
     # Get gratuities from checks
     gratuities = get_gratuitites_from_checks(checks)
 
@@ -268,8 +272,16 @@ def sales_and_payments_from_raw_order_data(data: list[dict]) -> tuple[pd.DataFra
     # Drop voided payments (already gone from payments)
     orders, checks = remove_voided_payments_from_orders_checks(orders, checks, payments)
 
+    # End if empty
+    if orders.empty and checks.empty:
+        return pd.DataFrame(), pd.DataFrame()
+
     # Selections
     selections = checks['selections'].apply(pd.Series)
+
+    # End if empty
+    if selections.empty:
+        return pd.DataFrame(), pd.DataFrame()
 
     # Remove voided selections
     if not selections.empty:
