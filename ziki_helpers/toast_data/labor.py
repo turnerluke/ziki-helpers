@@ -11,6 +11,9 @@ def time_entries_and_start_dates_from_labor_data(data: list[dict], start_dates: 
         tuple[pd.DataFrame, pd.DataFrame]:
     labor = pd.DataFrame(data)
 
+    # Location to integer, comes through DBD as a decimal
+    labor['location'] = labor['location'].astype(int)
+
     # Remove deleted
     if 'deleted' in labor.columns:
         labor = labor.loc[~labor['deleted']]
