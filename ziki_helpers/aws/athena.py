@@ -10,6 +10,32 @@ pd.set_option('display.max_columns', None)
 
 athena_client = boto3.client('athena', region_name='us-east-1')
 
+"""
+########################################################################################################################
+                                                    Helpers
+########################################################################################################################
+"""
+
+def decimal_if_number(x):
+    try:
+        return Decimal(x)
+    except:
+        return Decimal(0)
+
+
+def int_if_number(x):
+    try:
+        return int(x)
+    except:
+        return 0
+
+
+"""
+########################################################################################################################
+                                                    Athena
+########################################################################################################################
+"""
+
 
 def repair_table(table_name: str, database: str) -> None:
     """
@@ -17,7 +43,11 @@ def repair_table(table_name: str, database: str) -> None:
     ie. a new year, month, day, etc.
     """
     repair_command = f"MSCK REPAIR TABLE {table_name}"
-    query_athena_wait_for_success(repair_command, database, f's3://ziki-athena-query-results/repair-table-{table_name}/')
+    query_athena_wait_for_success(
+        repair_command,
+        database,
+        f's3://ziki-athena-query-results/repair-table-{table_name}/'
+    )
 
 
 def query_athena_wait_for_success(query: str, database: str, output_location: str = None) -> str:
@@ -36,7 +66,6 @@ def query_athena_wait_for_success(query: str, database: str, output_location: st
         response = athena_client.get_query_execution(
             QueryExecutionId=query_execution_id
         )
-        #return query_execution_id
 
     status = response['QueryExecution']['Status']['State']
 
@@ -50,7 +79,7 @@ def query_athena_wait_for_success(query: str, database: str, output_location: st
         if status in ['SUCCEEDED', 'FAILED', 'CANCELLED']:
             break
 
-        time.sleep(5)  # Wait for 5 seconds before checking the status again
+        time.sleep(3)  # Wait for 5 seconds before checking the status again
 
     # Check if the query succeeded
     if status != 'SUCCEEDED':
@@ -116,13 +145,13 @@ def query_athena_get_results_as_df(
         if dtype.startswith('varchar'):
             df[col] = df[col].astype(str)
         elif dtype in ['integer', 'tinyint', 'smallint', 'bigint', 'int']:
-            df[col] = df[col].astype(int)
+            df[col] = df[col].apply(int_if_number)
         elif dtype == 'boolean':
             df[col].apply(lambda x: x.strip().upper() == 'TRUE')
         elif dtype in ['float', 'double']:
             df[col] = df[col].astype(float)
         elif dtype == 'decimal':
-            df[col] = df[col].apply(lambda x: Decimal(x))
+            df[col] = df[col].apply(decimal_if_number)
         # Add more data type mappings as needed
 
     return df
