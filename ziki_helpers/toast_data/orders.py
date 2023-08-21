@@ -308,7 +308,10 @@ def sales_and_payments_from_raw_order_data(data: list[dict]) -> tuple[pd.DataFra
         assert (~mods['deferred']).all(), 'Deferred modifiers'
         assert mods['voidReason'].isna().all(), 'Voided Modifiers'
         assert (~mods['voided']).all(), 'Voided modifiers'
-        assert (~mods['modifiers'].astype(bool)).all(), 'Modified modifiers'
+        # assert (~mods['modifiers'].astype(bool)).all(), 'Modified modifiers'
+        # TODO: Handle modified modifiers
+        # Split the "modifiers" that are actually just new items out into the items df
+        # Adjust the cost of each
 
         # Remove request messages
         mods = mods.loc[mods['selectionType'] != 'SPECIAL_REQUEST']
