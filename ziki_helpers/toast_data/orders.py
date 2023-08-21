@@ -38,7 +38,7 @@ def process_orders(orders: pd.DataFrame) -> Union[pd.DataFrame, None]:
     # Trim down to necessary columns
     orders = orders[
         ['location', 'businessDate', 'estimatedFulfillmentDate', 'guid', 'diningOption', 'checks', 'voided', 'deleted']
-    ]
+    ].copy()
 
     # Location to integer, comes through DBD as a decimal
     orders['location'] = orders['location'].astype(int)
