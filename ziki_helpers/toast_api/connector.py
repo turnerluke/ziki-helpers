@@ -1,3 +1,4 @@
+# Standard Library
 import os
 import datetime as dt
 import pytz
@@ -7,11 +8,16 @@ from decimal import Decimal
 from typing import Any, Union
 import re
 import time
+from zoneinfo import ZoneInfo
 
+# Common 3rd Party
 import pandas as pd
 import boto3
+
+# My 3rd Party
 from toast_auth import ToastToken
 
+# My Libraries
 import ziki_helpers.config.settings
 from ziki_helpers.aws.s3 import read_from_s3, write_to_s3
 from ziki_helpers.aws.dynamodb import get_entire_table
@@ -23,6 +29,13 @@ def is_iso_datetime(input_string):
         return True
     except ValueError:
         return False
+
+
+def format_datetime_to_iso(date_time: dt.datetime) -> str:
+    iso_str = date_time.isoformat(timespec='milliseconds')
+    if date_time.tzinfo is None:
+        iso_str += 'Z'
+    return iso_str
 
 
 def is_camel_case(input_str):
@@ -149,8 +162,8 @@ class ToastConnector:
             time_window_end = time_window_start + dt.timedelta(days=30)
             # Query time entries
             query = {
-                "modifiedStartDate": time_window_start.isoformat(timespec='milliseconds'),
-                "modifiedEndDate": time_window_end.isoformat(timespec='milliseconds'),
+                "modifiedStartDate": format_datetime_to_iso(time_window_start),
+                "modifiedEndDate": format_datetime_to_iso(time_window_end),
             }
 
             response = requests.get(labor_url, headers=self.headers(location_guid), params=query)
@@ -338,5 +351,12 @@ if __name__ == '__main__':
     # Test the API
     conn = ToastConnector()
     location_guid = "1cc71734-609b-433d-828e-de40ce017f27"
-    data = conn.get_labor_mappings("jobs", location_guid)
+    # data = conn.get_labor_mappings("jobs", location_guid)
+    # print(data)
+    start = dt.datetime(2023, 8, 1, 0, 0, 0)
+    end = dt.datetime.now()
+    # print(format_datetime_to_iso(start))
+    # print(format_datetime_to_iso(end))
+    data = conn.get_labor_between_times(start, end, location_guid=location_guid)
+
     print(data)
