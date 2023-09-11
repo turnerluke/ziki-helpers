@@ -252,7 +252,7 @@ class ToastConnector:
         data = response.json()
         return data
 
-    def get_menu_items_by_business_date(self, starting_datetime: dt.datetime, location_guid: Union[str, None] = None) -> list[dict[str, Any]]:
+    def get_menu_items_by_after_datetime(self, starting_datetime: dt.datetime, location_guid: Union[str, None] = None) -> list[dict[str, Any]]:
         query = {
             "lastModified": format_datetime_to_iso(starting_datetime)
         }
