@@ -65,6 +65,7 @@ menu_url = f"{TOAST_API_SERVER}/menus/v2/menus"
 menu_items_url = f"{TOAST_API_SERVER}/config/v2/menuItems"
 inventory_url = f"{TOAST_API_SERVER}/stock/v1/inventory"
 last_updated_url = f"{TOAST_API_SERVER}/menus/v2/metadata"
+restaurant_url = f"{TOAST_API_SERVER}/restaurants/v1/restaurants"
 
 
 # Stores the last time orders were written to DynamoDB
@@ -133,8 +134,8 @@ class ToastConnector:
             print("Page: ", page)
             # Query the orders
             query = {
-                "startDate": start.isoformat(timespec='milliseconds'),
-                "endDate": end.isoformat(timespec='milliseconds'),
+                "startDate": format_datetime_to_iso(start),
+                "endDate": format_datetime_to_iso(end),
                 "page": str(page),
                 "pageSize": "100",
             }
@@ -334,6 +335,17 @@ class ToastConnector:
 
         return {'modifier_name': mod_name, 'modifier_group_name': mod_group_name, 'menu_items': menu_items}
 
+    def get_restaurant_info(self, location_guid: Union[str, None] = None) -> dict:
+        if location_guid is not None:
+            self.location_guid = location_guid
+
+        # Get restaurant info
+        url = restaurant_url + '/' + self.location_guid
+        response = requests.get(url, headers=self.headers(location_guid))
+        assert response.status_code == 200, f"API call failed. Response.\n{response}"
+        data = response.json()
+        return data
+
     def headers(self, location_guid: Union[str, None] = None) -> dict[str, str]:
         # Adjust location guid if specified
         if location_guid is not None:
@@ -353,10 +365,13 @@ if __name__ == '__main__':
     location_guid = "1cc71734-609b-433d-828e-de40ce017f27"
     # data = conn.get_labor_mappings("jobs", location_guid)
     # print(data)
-    start = dt.datetime(2023, 8, 1, 0, 0, 0)
-    end = dt.datetime.now()
-    # print(format_datetime_to_iso(start))
-    # print(format_datetime_to_iso(end))
-    data = conn.get_labor_between_times(start, end, location_guid=location_guid)
+    # start = dt.datetime(2023, 8, 1, 0, 0, 0)
+    # end = dt.datetime.now()
+    # # print(format_datetime_to_iso(start))
+    # # print(format_datetime_to_iso(end))
+    # data = conn.get_labor_between_times(start, end, location_guid=location_guid)
 
-    print(data)
+#     print(data)
+    data = conn.get_restaurant_info(location_guid)
+    from pprint import pprint
+    pprint(data)
