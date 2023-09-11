@@ -1,5 +1,6 @@
 from delta.tables import DeltaTable
 
+
 def upsert(df, table_path, spark, key_col='guid'):
     delta_table = DeltaTable.forPath(spark, table_path)
 
