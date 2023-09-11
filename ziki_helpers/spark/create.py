@@ -1,7 +1,7 @@
 from pyspark.sql import SparkSession
 
 
-def get_spark_for_delta_s3(aws_region):
+def get_spark_for_delta_s3(aws_region='us-east-1'):
     spark_jars_packages = (
         "com.amazonaws:aws-java-sdk:1.12.246,"
         "org.apache.hadoop:hadoop-aws:3.2.2,"
