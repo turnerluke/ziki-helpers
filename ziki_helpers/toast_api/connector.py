@@ -252,6 +252,22 @@ class ToastConnector:
         data = response.json()
         return data
 
+    def get_menu_items_by_business_date(self, starting_datetime: dt.datetime, location_guid: Union[str, None] = None) -> list[dict[str, Any]]:
+        query = {
+            "lastModified": format_datetime_to_iso(starting_datetime)
+        }
+        response = requests.get(menu_items_url, headers=self.headers(location_guid), params=query)
+        assert response.ok, f"API call failed. Response.\n{response}"
+
+        data = response.json()
+        next_page_token = response.headers.get('Toast-Next-Page-Token')
+        while next_page_token is not None:
+            query['pageToken'] = next_page_token
+            response = requests.get(menu_items_url, headers=self.headers(location_guid), params=query)
+            data += response.json()
+            next_page_token = response.headers.get('Toast-Next-Page-Token')
+        return data
+
     def get_item_name_from_guid(self, item_guid: str, location_guid: Union[str, None] = None) -> str:
         # Get the menu item name from the item guid
         url = menu_items_url + '/' + item_guid
