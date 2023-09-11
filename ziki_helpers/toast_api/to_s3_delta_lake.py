@@ -145,7 +145,6 @@ class ToastDataPipeline(ToastConnector):
 
         # Preprocess the data to spark dataframe
         df = preprocess_menu_items(data, spark)
-        df.show()
 
         # Write the data to delta lake
         table_path = f's3://{DATABASE_S3_BUCKET}/menu_items'
