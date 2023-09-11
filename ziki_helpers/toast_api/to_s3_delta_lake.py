@@ -111,7 +111,7 @@ def get_start_and_end_of_last_week() -> tuple[dt.date, dt.date]:
     return mon, sun
 
 
-class ToastDataFlow(ToastConnector):
+class ToastDataPipeline(ToastConnector):
 
     def __init__(self):
         super().__init__()
