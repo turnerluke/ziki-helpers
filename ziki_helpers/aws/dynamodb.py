@@ -15,7 +15,7 @@ dynamodb = boto3.resource('dynamodb', region_name='us-east-1')
 
 def get_entire_table(table: Union[str, boto3.resource('dynamodb').Table]) -> JSONType:
     """
-    Query an entire table in DynamoDB with the scan operation.
+    Query an entire table in DynamoDB with the scan scripts.
     :param table:
     :return:
     """
