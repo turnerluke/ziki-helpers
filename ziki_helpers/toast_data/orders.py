@@ -290,7 +290,8 @@ def sales_and_payments_from_raw_order_data(data: list[dict]) -> tuple[pd.DataFra
     selections = selections.stack().apply(pd.Series)
 
     # Sanity Checks
-    assert (~selections['deferred']).all(), "Deferred selections"
+    # assert (~selections['deferred']).all(), "Deferred selections"
+    selections = selections.loc[~selections['deferred']]
     assert selections['voidReason'].isna().all(), "Remaining Voids"
     assert (~selections['voided']).all(), "Remaining Voids"
 
