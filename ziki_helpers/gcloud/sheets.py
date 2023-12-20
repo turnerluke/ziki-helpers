@@ -46,5 +46,14 @@ def df_to_worksheet(df: pd.DataFrame, sheetname: str, worksheet: str, clear_old_
     wksht.update([df.columns.values.tolist()] + df.values.tolist())
 
 
+def get_select_worksheets_as_df(sheetname: str, worksheets: list[str]) -> pd.DataFrame:
+    """Given a Google Sheet name and worksheet names, returns the worksheets as a pandas DataFrame. Concatenates all worksheets."""
+    ss = get_gspreadsheet(sheetname)
+    wkshts = [ss.worksheet(worksheet) for worksheet in worksheets]
+    dfs = [pd.DataFrame(wksht.get_all_records()) for wksht in wkshts]
+    df = pd.concat(dfs, axis='index', ignore_index=True)
+    return df
+
+
 def get_all_spreadsheet_names():
     return [sheet['name'] for sheet in gc.list_spreadsheet_files()]
