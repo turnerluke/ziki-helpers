@@ -157,30 +157,46 @@ def query_athena_get_results_as_df(
     return df
 
 
+# TODO: Implement this
+# def athena2pandas(dtype: str, dtype_backend: Optional[str] = None) -> str:  # pylint: disable=too-many-return-statements
+#     """Athena to Pandas data types conversion."""
+#     dtype = dtype.lower()
+#     if dtype == "tinyint":
+#         return "Int8" if dtype_backend != "pyarrow" else "int8[pyarrow]"
+#     if dtype == "smallint":
+#         return "Int16" if dtype_backend != "pyarrow" else "int16[pyarrow]"
+#     if dtype in ("int", "integer"):
+#         return "Int32" if dtype_backend != "pyarrow" else "int32[pyarrow]"
+#     if dtype == "bigint":
+#         return "Int64" if dtype_backend != "pyarrow" else "int64[pyarrow]"
+#     if dtype in ("float", "real"):
+#         return "float32" if dtype_backend != "pyarrow" else "double[pyarrow]"
+#     if dtype == "double":
+#         return "float64" if dtype_backend != "pyarrow" else "double[pyarrow]"
+#     if dtype == "boolean":
+#         return "boolean" if dtype_backend != "pyarrow" else "bool[pyarrow]"
+#     if (dtype == "string") or dtype.startswith("char") or dtype.startswith("varchar"):
+#         return "string" if dtype_backend != "pyarrow" else "string[pyarrow]"
+#     if dtype in ("timestamp", "timestamp with time zone"):
+#         return "datetime64" if dtype_backend != "pyarrow" else "date64[pyarrow]"
+#     if dtype == "date":
+#         return "date" if dtype_backend != "pyarrow" else "date32[pyarrow]"
+#     if dtype.startswith("decimal"):
+#         return "decimal" if dtype_backend != "pyarrow" else "double[pyarrow]"
+#     if dtype in ("binary", "varbinary"):
+#         return "bytes" if dtype_backend != "pyarrow" else "binary[pyarrow]"
+#     if dtype in ("array", "row", "map"):
+#         return "object"
+#     if dtype == "geometry":
+#         return "string"
+#     raise exceptions.UnsupportedType(f"Unsupported Athena type: {dtype}")
 
-# if __name__ == '__main__':
-#     import datetime as dt
-#     last_sunday = dt.date.today() - dt.timedelta(days=dt.date.today().weekday() + 1)
-#
-#     early_cutoff = last_sunday - dt.timedelta(days=4 * 7)
-#
-#     # Get sales by location & week ending
-#     q = """
-#     SELECT *
-#     FROM time_entries
-#     WHERE
-#         year=2023
-#         AND
-#         month=7
-#         AND
-#         day=10
-#     LIMIT 10
-#     ;
-#     """
-#
-#     database = 'ziki_analytics'
-#     s3_output = 's3://ziki-athena-query-results/athena-results/'
-#
-#     df = query_athena_get_results_as_df(q, database, s3_output)
-#
-#     print(df)
+
+
+
+if __name__ == '__main__':
+    q = """
+        SELECT * FROM upsert_test_no_table
+    """
+
+    df = query_athena_get_results_as_df(q, database='toast-dev')
